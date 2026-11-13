@@ -27,9 +27,14 @@
   h3 { font-size: 20px; font-weight: 900; text-transform: uppercase; }
   p { font-weight: 600; }
   section { padding: 44px 0; border-top: 4px solid var(--ink); }
-  .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center; padding: 20px 0 48px; }
-  .hero p.lead { font-size: clamp(17px, 2.6vw, 22px); margin: 18px 0 24px; max-width: 30ch; }
-  .screen { border: 10px solid var(--ink); background: #fff; aspect-ratio: 1; width: 100%; max-width: 420px; justify-self: center; }
+  /* hero: one column, the demo screen first so the game presents itself, then the name, buttons, lead */
+  .hero { display: flex; flex-direction: column; gap: 18px; max-width: 480px; margin: 0 auto; padding: 8px 0 48px; }
+  .hero h1 { text-align: center; font-size: min(26vw, 136px); }
+  .hero .btns { display: grid; grid-template-columns: 1.7fr 1fr; }
+  .hero .btn { text-align: center; padding: 15px 10px; font-size: clamp(13px, 3.6vw, 17px); }
+  @media (max-width: 480px) { .hero .url { display: none; } .hero .btns { grid-template-columns: 1fr 1fr; } }
+  .hero p.lead { font-size: clamp(17px, 2.6vw, 22px); }
+  .screen { border: 10px solid var(--ink); background: #fff; aspect-ratio: 1; width: 100%; }
   [data-theme="dark"] .screen { border-color: #f2f2f2; }
   canvas { display: block; width: 100%; height: 100%; }
   [data-theme="dark"] canvas { filter: invert(1); }
@@ -66,7 +71,6 @@
   #gate p { font-size: 15px; text-transform: uppercase; }
   [hidden] { display: none !important; }
   @media (max-width: 760px) {
-    .hero { grid-template-columns: 1fr; }
     .steps { grid-template-columns: 1fr 1fr; }
     .step:nth-child(2) { border-right: 0; }
     .step:nth-child(-n+2) { border-bottom: 4px solid var(--ink); }
@@ -85,18 +89,16 @@
 </div></div>
 
 <div class="wrap">
-  <div class="bar"><span class="grow">Gochi · 4xs.dev</span><a href="https://github.com/kotyzap/gochi">GitHub</a><button id="theme">Dark</button></div>
+  <div class="bar"><span class="grow">Gochi · 4xs.dev</span><a href="https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego">GitHub</a><button id="theme">Dark</button></div>
 
   <div class="hero">
-    <div>
-      <h1>GOCHI</h1>
-      <p class="lead">A little pet with a very big ego. Feed it, flatter it, let it nap. It started on an ESP32 e-paper box. Now it also lives in your phone.</p>
-      <div class="btns">
-        <a class="btn on" href="https://gochi.4xs.dev">Play now · gochi.4xs.dev</a>
-        <a class="btn" href="#box">Get the box</a>
-      </div>
-    </div>
     <div class="screen"><canvas id="demo" aria-label="Welcome to Gochi, then the eight gochis with their traits, one after another"></canvas></div>
+    <h1>GOCHI</h1>
+    <div class="btns">
+      <a class="btn on" href="https://gochi.4xs.dev">Play now<span class="url"> · gochi.4xs.dev</span></a>
+      <a class="btn" href="#box">Get the box</a>
+    </div>
+    <p class="lead">A little pet with a very big ego. Feed it, flatter it, let it nap. It started on an ESP32 e-paper box. Now it also lives in your phone.</p>
   </div>
 
   <section>
@@ -140,7 +142,7 @@
         <div class="btns">
           <a class="btn on" href="install/">Install firmware</a>
           <a class="btn" href="https://www.waveshare.com/esp32-s3-epaper-1.54.htm">Buy the board</a>
-          <a class="btn" href="https://github.com/kotyzap/gochi">Source</a>
+          <a class="btn" href="https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego">Source</a>
         </div>
       </div>
     </div>
@@ -164,7 +166,7 @@
     <p><b>Satire, for entertainment only.</b> The gochis are cartoon parodies of the public personas of well-known politicians. Nothing here is a statement of fact, and no words or actions are attributed to any real person. Gochi is not affiliated with, endorsed by or connected to anyone it depicts.</p>
     <p><b>No harm wanted.</b> "Game over" means a game ended. It is not a wish, a threat or a call for harm to anyone. I joke about burgers, parades and long tables. I don't joke about health, age or family.</p>
     <p><b>What I store.</b> Your nickname, a hash of your PIN, and your gochi's game state. No email, no real name, no ads, no trackers. The sign-in is kept in your browser's storage.</p>
-    <p><b>Something bothers you?</b> Open an issue on <a href="https://github.com/kotyzap/gochi/issues">GitHub</a>.</p>
+    <p><b>Something bothers you?</b> Open an issue on <a href="https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego/issues">GitHub</a>.</p>
   </section>
 
   <footer>Gochi · made by Pavel Kotyza · 4xs.dev</footer>
