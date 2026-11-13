@@ -62,6 +62,7 @@ static int gfxRotation(int deg) { return (1 + deg / 90) & 3; }   // as booth_qr:
 #define RTC_ADDR 0x51
 #define BAT_ADC  4
 #define BTN      0
+#define AUDIO_PWR 42   // LOW = on: the audio codec shares the I2C bus; unpowered it can hold SDA low (rtc_check powers it too)
 
 static const int BAT_EMPTY_MV = 3350;
 
@@ -248,8 +249,12 @@ static void civilFromDays(int64_t z, int &y, unsigned &m, unsigned &d) {
 static uint8_t bcd2bin(uint8_t v) { return (v >> 4) * 10 + (v & 0x0F); }
 static uint8_t bin2bcd(uint8_t v) { return ((v / 10) << 4) | (v % 10); }
 
+static int i2cBoot = -1;                               // "?C": SDA*2 + SCL as found before the recovery (from booth_qr)
 static void i2cRecover() {   // a reset mid-read can leave the RTC holding SDA low
   pinMode(I2C_SDA, INPUT_PULLUP);
+  pinMode(I2C_SCL, INPUT_PULLUP);
+  delayMicroseconds(10);
+  i2cBoot = digitalRead(I2C_SDA) * 2 + digitalRead(I2C_SCL);
   pinMode(I2C_SCL, OUTPUT_OPEN_DRAIN);
   digitalWrite(I2C_SCL, HIGH);
   delayMicroseconds(10);
@@ -290,6 +295,20 @@ static bool rtcWrite(uint32_t t) {
   Wire.write(bin2bcd(y - 2000));
   return Wire.endTransmission() == 0;
 }
+
+// "?C": raw PCF85063 registers 0x00..0x0A + I2C state + bus scan, for diagnosis (booth_qr "R")
+static void rtcDump() {
+  Wire.beginTransmission(RTC_ADDR);
+  Wire.write(0x00);
+  int e = Wire.endTransmission(false);
+  int n = e ? 0 : Wire.requestFrom(RTC_ADDR, 11);
+  Serial.printf("OK rtc i2c %d n %d", e, n);
+  for (int i = 0; i < n; i++) Serial.printf(" %02x", Wire.read());
+  Serial.printf(" boot sda/scl %d/%d scan", i2cBoot >> 1, i2cBoot & 1);
+  for (int a = 1; a < 127; a++) { Wire.beginTransmission(a); if (Wire.endTransmission(true) == 0) Serial.printf(" %02x", a); }
+  Serial.println();
+}
+static void i2cRestart() { Wire.end(); i2cRecover(); Wire.begin(I2C_SDA, I2C_SCL); }   // bus stuck: free it, start the driver again
 
 // ---------- battery (from booth_qr) ----------
 static int batMv() {
@@ -394,7 +413,9 @@ static bool demoGame = false;                          // slide shows the game s
 static uint32_t demoAtMs = 0, demoStartMs = 0;         // current slide drawn at; slides started at
 static const uint32_t SPLASH_MS = 3000;               // "Welcome to GOCHI", then the slides start by themselves
 static bool splash = false;                            // splash showing (only while demo)
-RTC_DATA_ATTR static bool gate = false;                // "ARE YOU 21+?" before the splash; long press = yes (kept over deep sleep)
+RTC_DATA_ATTR static bool gate = false;                // "ARE YOU 21+?" before the splash (kept over deep sleep)
+static int gateSel = 0;                                // 21+ buttons: 0 YES, 1 NO (short = switch, long = confirm)
+static bool nope = false;                              // NO chosen: "SORRY" screen, any press = back to the question
 static char cardTag[8] = "";                           // slides: "k/n" drawn on the game screen
 
 static void text(const char *t, int size, int x, int y, uint16_t c = GxEPD_BLACK) {
@@ -505,18 +526,33 @@ static void draw(bool full) {
 
 static void center(const char *t, int size, int y) { text(t, size, (200 - (int)strlen(t) * 6 * size) / 2, y); }
 
-// Age question before the splash; waits for a long press (a short one does nothing).
-static void drawGate() {
+// Age question before the splash: big YES / NO buttons, short = switch, long = confirm. NO -> "SORRY".
+static void drawGate(bool full) {
   display.setFullWindow();
   display.fillScreen(GxEPD_WHITE);
-  center("ARE YOU", 3, 34);
-  center("21+?", 6, 66);
-  display.fillRect(40, 124, 120, 2, GxEPD_BLACK);
-  center("Satire for adults", 1, 136);
-  center("For entertainment only", 1, 148);
-  center("hold = YES", 2, 176);
+  if (nope) {
+    center("SORRY", 4, 50);
+    center("Gochi is 21+ only.", 1, 100);
+    center("Come back later.", 1, 112);
+    center("press: back", 1, 186);
+  } else {
+    center("ARE YOU", 3, 14);
+    center("21+?", 6, 44);
+    display.fillRect(40, 100, 120, 2, GxEPD_BLACK);
+    center("Satire for adults", 1, 110);
+    center("For entertainment only", 1, 122);
+    const char *lb[2] = { "YES", "NO" };
+    for (int i = 0; i < 2; i++) {
+      int x = 4 + i * 98;
+      bool on = i == gateSel;
+      if (on) display.fillRect(x, 142, 94, 54, GxEPD_BLACK); else { display.drawRect(x, 142, 94, 54, GxEPD_BLACK); display.drawRect(x + 1, 143, 92, 52, GxEPD_BLACK); }
+      text(lb[i], 3, x + 47 - (int)strlen(lb[i]) * 9, 158, on ? GxEPD_WHITE : GxEPD_BLACK);
+    }
+  }
+  full = full || forceFull || (refreshes % FULL_REFRESH_EVERY) == 0;
   refreshes++;
-  display.display(false);
+  forceFull = false;
+  display.display(!full);
 }
 
 // Splash before the slides: "Welcome to GOCHI"; after 3 s (or a press) the slides.
@@ -541,6 +577,51 @@ static void drawBm2(int i, int cx, int y) {
     if (b.d[j * bpr + (k >> 3)] & (0x80 >> (k & 7))) display.fillRect(x0 + 2 * k, y + 2 * j, 2, 2, GxEPD_BLACK);
 }
 
+// Country flag 32 x 20 in the corner of the intro card, by pack id (custom ids: none). 1-bit: blue = black,
+// red = 50 % dither, white = white. Same drawing in gochi-web and on the GitHub page.
+static const char *flagFor(const char *id) {
+  static const char *M[][2] = { {"trump", "US"}, {"biden", "US"}, {"aoc", "US"}, {"zeman", "CZ"}, {"babis", "CZ"},
+                                {"putin", "RU"}, {"kim", "KP"}, {"xi", "CN"} };
+  for (auto &m : M) if (!strcasecmp(id, m[0])) return m[1];
+  return nullptr;
+}
+static void dither(int x, int y, int w, int h) {
+  for (int j = 0; j < h; j++) for (int i = j & 1; i < w; i += 2) display.drawPixel(x + i, y + j, GxEPD_BLACK);
+}
+static void star(int cx, int cy, float r, uint16_t c) {
+  int px[10], py[10];
+  for (int i = 0; i < 10; i++) { float rr = (i & 1) ? r * 0.42f : r, a = -PI / 2 + i * PI / 5;
+    px[i] = cx + lroundf(cosf(a) * rr); py[i] = cy + lroundf(sinf(a) * rr); }
+  for (int i = 0; i < 10; i++) display.fillTriangle(cx, cy, px[i], py[i], px[(i + 1) % 10], py[(i + 1) % 10], c);
+}
+static void drawFlag(const char *f, int x, int y) {
+  const int W = 32, H = 20;
+  const uint16_t B = GxEPD_BLACK, Wh = GxEPD_WHITE;
+  display.fillRect(x, y, W, H, Wh);
+  if (!strcmp(f, "US")) {
+    for (int j = 0; j < H; j += 4) display.fillRect(x, y + j, W, 2, B);
+    display.fillRect(x, y, 15, 10, B);
+    for (int r = 0; r < 2; r++) for (int c = 0; c < 3; c++) display.fillRect(x + 2 + c * 4 + (r ? 2 : 0), y + 2 + r * 4, 2, 2, Wh);
+  } else if (!strcmp(f, "CZ")) {
+    dither(x, y + 10, W, 10);
+    display.fillTriangle(x, y, x + 16, y + 10, x, y + H, B);
+  } else if (!strcmp(f, "RU")) {
+    display.fillRect(x, y + 7, W, 6, B);
+    dither(x, y + 13, W, 7);
+  } else if (!strcmp(f, "CN")) {
+    dither(x, y, W, H);
+    star(x + 7, y + 7, 5, Wh);
+    const int sx[4] = { 13, 15, 15, 13 }, sy[4] = { 3, 6, 10, 13 };
+    for (int i = 0; i < 4; i++) display.fillRect(x + sx[i], y + sy[i], 2, 2, Wh);
+  } else if (!strcmp(f, "KP")) {
+    display.fillRect(x, y, W, 3, B); display.fillRect(x, y + H - 3, W, 3, B);
+    dither(x, y + 5, W, 10);
+    display.fillCircle(x + 10, y + 10, 4, Wh);
+    star(x + 10, y + 10, 3.5f, B);
+  }
+  display.drawRect(x, y, W, H, B);
+}
+
 // Slide, two per character: big card (title + big face), then the game screen at its starting values (traits, actions).
 // Short = tiles, long = choose.
 static void drawWelcome(bool full) {
@@ -551,6 +632,7 @@ static void drawWelcome(bool full) {
     display.fillScreen(GxEPD_WHITE);
     if (!drawBm(BM_TITLE, 0, 0, 200, 18, GxEPD_BLACK)) center(packId, 2, 2);
     if (bms[BM_MOOD0].w) drawBm2(BM_MOOD0, 100, 20); else drawFace();
+    if (const char *f = flagFor(packId)) drawFlag(f, 164, 22);   // top right corner, above the face's hair/hat
     char t[24]; snprintf(t, sizeof t, "%d/%d   press: skip", k, n);
     center(t, 1, 188);
     display.display(!(full || forceFull || (refreshes++ % FULL_REFRESH_EVERY) == 0));
@@ -732,11 +814,12 @@ static void handleSerial(uint32_t now) {
     if (line[0] == 'P' && len >= 2) handlePack(line, len, now);
     else if (!strcmp(line, "?")) status(now);
     else if (!strcmp(line, "?S")) details(now);
+    else if (!strcmp(line, "?C")) rtcDump();
     else if (!strcmp(line, "V")) Serial.printf("OK vbat %d mV %d%%\n", batMv(), batPct(batMv()));
     else if (line[0] == 'T') {
       uint32_t t = strtoul(line + 1, nullptr, 10);
       if (t < 1700000000UL) Serial.println("ERR bad time");
-      else if (!rtcWrite(t)) Serial.println("ERR clock chip not answering");
+      else if (!rtcWrite(t) && (i2cRestart(), !rtcWrite(t))) Serial.println("ERR clock chip not answering");
       else {
         if (st.last > t || t - st.last > 30 * 86400UL) { st.last = t; st.sleepUntil = 0; if (st.zeroSince) st.zeroSince = t; save(); }   // clock was wrong
         Serial.println("OK time set");
@@ -784,21 +867,25 @@ static void enterWelcome(uint32_t now) {
   cand = nextSlot(-1);
   if (cand < 0) { loadSlot(SLOT_BUILTIN); newGame(SLOT_BUILTIN, now); addStat(ENERGY, 0); sel = 0; }
   else { loadSlot(cand); st.slot = SLOT_NONE; st.dead = 0; st.ver = 2; }
-  demo = splash = gate = cand >= 0; demoGame = false; demoStartMs = millis();
+  demo = splash = gate = cand >= 0; gateSel = 0; nope = false; demoGame = false; demoStartMs = millis();
   save(); forceFull = true; redraw = true;
 }
 
 static void show(uint32_t now, bool full) {
   if (st.dead) drawDead(now);
-  else if (st.slot == SLOT_NONE) { if (gate) drawGate(); else if (!demo) drawTiles(full); else if (splash) drawSplash(); else drawWelcome(full); }
+  else if (st.slot == SLOT_NONE) { if (gate) drawGate(full); else if (!demo) drawTiles(full); else if (splash) drawSplash(); else drawWelcome(full); }
   else draw(full);
 }
 
 static void onButton(int b, uint32_t now) {
   if (st.dead) { if (b == B_LONG) enterWelcome(now); return; }
   if (st.slot == SLOT_NONE) {
-    if (gate) {                                        // 21+: long press = yes -> splash, short = nothing
-      if (b == B_LONG) { gate = false; demo = splash = true; demoGame = false; demoStartMs = millis(); forceFull = true; redraw = true; }
+    if (gate) {                                        // 21+: short = switch YES/NO, long = confirm
+      if (nope) { nope = false; gateSel = 0; forceFull = true; }
+      else if (b == B_SHORT || b == B_DOUBLE) gateSel ^= 1;
+      else if (b == B_LONG && gateSel == 1) { nope = true; forceFull = true; }
+      else if (b == B_LONG) { gate = false; demo = splash = true; demoGame = false; demoStartMs = millis(); forceFull = true; }
+      redraw = true;
       return;
     }
     if (splash) { splash = false; forceFull = true; redraw = true; return; }   // splash: any press starts the slides
@@ -827,6 +914,8 @@ void setup() {
   digitalWrite(VBAT_PWR, HIGH);                        // first: latch battery power
   pinMode(EPD_PWR, OUTPUT);
   digitalWrite(EPD_PWR, LOW);
+  pinMode(AUDIO_PWR, OUTPUT);
+  digitalWrite(AUDIO_PWR, LOW);                        // before I2C, as in Waveshare's examples
   for (int pin : { VBAT_PWR, EPD_PWR, EPD_RST, EPD_CS }) gpio_hold_dis((gpio_num_t)pin);
   if (cause == ESP_SLEEP_WAKEUP_EXT0) rtc_gpio_deinit((gpio_num_t)BTN);
   pinMode(BTN, INPUT_PULLUP);
@@ -834,6 +923,7 @@ void setup() {
   attachInterrupt(BTN, btnIsr, CHANGE);
   Serial.setRxBufferSize(4096);                        // pack lines arrive while the screen refreshes
   Serial.begin(115200);
+  if (!woke) delay(100);                               // power-on: let the rails settle before touching the RTC (as booth_qr)
   i2cRecover();
   Wire.begin(I2C_SDA, I2C_SCL);
   SPI.begin(EPD_SCK, -1, EPD_MOSI, EPD_CS);

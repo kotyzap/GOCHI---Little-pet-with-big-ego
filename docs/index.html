@@ -273,6 +273,25 @@ const START = {
   xi: [['BAOZI', 70], ['EGO', 75], ['PARTY', 75], ['ENERGY', 75], ['BAOZI', 'BELT & ROAD', 'PANDA', 'SLEEP']],
 };
 
+// Country flag 32 x 20 for the intro card, 1-bit like the box: blue = black, red = 50 % dither, white = white (same as firmware)
+const FLAG = { trump: 'US', biden: 'US', aoc: 'US', zeman: 'CZ', babis: 'CZ', putin: 'RU', kim: 'KP', xi: 'CN' };
+function drawFlag(x, f, X, Y) {
+  const W = 32, H = 20, B = '#000', Wh = '#fff';
+  const rect = (a, b, w, h, c) => { x.fillStyle = c; x.fillRect(X + a, Y + b, w, h); };
+  const dither = (a, b, w, h) => { x.fillStyle = B; for (let j = 0; j < h; j++) for (let i = j & 1; i < w; i += 2) x.fillRect(X + a + i, Y + b + j, 1, 1); };
+  const star = (cx, cy, r, c) => { x.fillStyle = c; x.beginPath();
+    for (let i = 0; i < 10; i++) { const rr = i & 1 ? r * .42 : r, a = -Math.PI / 2 + i * Math.PI / 5; x.lineTo(X + cx + Math.cos(a) * rr, Y + cy + Math.sin(a) * rr); }
+    x.closePath(); x.fill(); };
+  rect(0, 0, W, H, Wh);
+  if (f === 'US') { for (let j = 0; j < H; j += 4) rect(0, j, W, 2, B); rect(0, 0, 15, 10, B);
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) rect(2 + c * 4 + (r ? 2 : 0), 2 + r * 4, 2, 2, Wh); }
+  else if (f === 'CZ') { dither(0, 10, W, 10); x.fillStyle = B; x.beginPath(); x.moveTo(X, Y); x.lineTo(X + 16, Y + 10); x.lineTo(X, Y + H); x.closePath(); x.fill(); }
+  else if (f === 'RU') { rect(0, 7, W, 6, B); dither(0, 13, W, 7); }
+  else if (f === 'CN') { dither(0, 0, W, H); star(7, 7, 5, Wh); [[13, 3], [15, 6], [15, 10], [13, 13]].forEach(([a, b]) => rect(a, b, 2, 2, Wh)); }
+  else if (f === 'KP') { rect(0, 0, W, 3, B); rect(0, H - 3, W, 3, B); dither(0, 5, W, 10);
+    x.fillStyle = Wh; x.beginPath(); x.arc(X + 10, Y + 10, 4.5, 0, 7); x.fill(); star(10, 10, 3.5, B); }
+  x.strokeStyle = B; x.lineWidth = 1; x.strokeRect(X + .5, Y + .5, W - 1, H - 1);
+}
 // hero: like the intro on the box — "Welcome to GOCHI", each gochi as big card + game screen (2 s each), then the grid
 const SEQ = [-1, ...CAST.flatMap((c, k) => [2 * k, 2 * k + 1]), 99];   // -1 splash, 2k big card, 2k+1 game screen, 99 grid
 const HOLD = { '-1': 3000, 99: 6000 };
@@ -287,6 +306,7 @@ function drawDemo() {
   } else if (s !== 99 && !(s & 1)) {
     label(x, CAST[k][1], 2, 14, 196, 20);
     faceAt(x, who, 0, 20, 24, 2);
+    if (FLAG[who]) drawFlag(x, FLAG[who], 164, 26);
     label(x, `${k + 1}/8`, 0, 192, 200, 11);
   } else if (s !== 99) {
     const t = START[who];

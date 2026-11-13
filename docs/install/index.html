@@ -43,6 +43,15 @@
     background: var(--bg-primary); color: var(--text-primary); font-size: 13px; font-family: inherit; min-width: 0; width: 100%; }
   input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
   .hint { font-size: 11px; color: var(--text-secondary); }
+  #order { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  #order li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg-primary); font-size: 13px; }
+  #order li.cur { border-color: var(--accent); background: var(--accent-light); }
+  #order li b { width: 16px; color: var(--text-secondary); font-weight: 600; }
+  #order li span { flex: 1; cursor: pointer; }
+  #order li button { width: 28px; height: 26px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-secondary);
+    color: var(--text-primary); cursor: pointer; font-size: 12px; }
+  #order li button:disabled { opacity: .3; cursor: default; }
   .grid { display: grid; gap: 6px; align-items: center; }
   .stats { grid-template-columns: 1.4fr .7fr .7fr; }
   .acts { grid-template-columns: 1.2fr 1.6fr repeat(4, .7fr) .6fr; }
@@ -70,7 +79,7 @@
 </head>
 <body>
 <header>
-  <h1>Gochi Uploader<span class="app-version">v0.5.3</span></h1>
+  <h1>Gochi Uploader<span class="app-version">v0.5.4</span></h1>
   <div class="header-actions">
     <a class="kofi-link" href="https://ko-fi.com/pavelk" target="_blank" rel="noopener">Buy me a Ko-fi</a>
     <button class="theme-toggle" id="theme">Dark mode</button>
@@ -126,6 +135,8 @@
     <div class="card-title">Box</div>
     <div class="hint">Desktop Chrome or Edge. Connect the box over USB-C. The box keeps up to 8 characters; on its welcome screen
       you pick one (short press = next, long press = choose) and play it until it dies. Uploading also sets the box clock.</div>
+    <div class="field"><label>Order on the box (slots, tiles, intro)</label><ol id="order"></ol>
+      <span class="hint">▲ ▼ to move. Saved in this browser. Applies on the next "Install all 8".</span></div>
     <div class="row">
       <button class="btn" id="all">Install all 8</button>
       <button class="btn secondary" id="up">Upload this one</button>
@@ -155,7 +166,17 @@ const $ = id => document.getElementById(id);
 const NS = 4, NA = 4, MOODS = ['Happy', 'Hungry', 'Tired', 'Angry'];
 
 // ---------- presets (public persona only: no health or age jokes) ----------
-const SLOT = { trump: 0, biden: 1, zeman: 2, babis: 3, aoc: 4, putin: 5, kim: 6, xi: 7 };
+const SLOT = { trump: 0, biden: 1, zeman: 2, babis: 3, aoc: 4, putin: 5, kim: 6, xi: 7 };   // default order
+// Order on the box = slot = position in this list (tiles and intro go by slot). Kept in this browser.
+const ORDER_KEY = 'gochi-order';
+function getOrder() {
+  let o = []; try { o = JSON.parse(localStorage.getItem(ORDER_KEY) || '[]'); } catch (e) {}
+  o = (Array.isArray(o) ? o : []).filter((n, i, a) => SLOT[n] !== undefined && a.indexOf(n) === i);
+  return o.concat(Object.keys(SLOT).filter(n => !o.includes(n)));
+}
+function setOrder(o) { try { localStorage.setItem(ORDER_KEY, JSON.stringify(o)); } catch (e) {} renderOrder(); if (curName) $('slot').value = o.indexOf(curName); }
+function moveChar(name, to) { const o = getOrder(), from = o.indexOf(name); if (to < 0 || to >= o.length || to === from) return;
+  o.splice(from, 1); o.splice(to, 0, name); setOrder(o); }
 const P = {
   trump: { id: 'trump', title: 'TRUMP-GOCHI', stats: [['BURGER', 70, 8], ['EGO', 60, 5], ['RATING', 75, 3], ['ENERGY', 80, 4]],
     acts: [['FEED', '+25 BURGERS', [25, 0, 0, 0], 0], ['RALLY', 'RALLY! +EGO', [0, 20, 3, -15], 0],
@@ -362,7 +383,7 @@ function snapshot() {
   };
 }
 async function applyChar(name, c) {
-  $('slot').value = c.slot ?? SLOT[name];
+  $('slot').value = getOrder().indexOf(name);
   $('pid').value = c.id; $('title').value = c.title;
   $('thr').value = c.thr || 128; $('thrv').textContent = $('thr').value;
   c.stats.forEach((s, i) => { $('sn' + i).value = s[0]; $('ss' + i).value = s[1]; $('sd' + i).value = s[2]; });
@@ -373,7 +394,14 @@ async function applyChar(name, c) {
 }
 // Loads a character: your saved edits if there are any, else the preset
 let curName = null;                     // character shown in the form (the select may already show the next one)
-function loadPreset(name) { curName = name; return applyChar(name, readEdits()[name] || P[name]); }
+function loadPreset(name) { curName = name; renderOrder(); return applyChar(name, readEdits()[name] || P[name]); }
+function renderOrder() {               // the list in the Box card + the preset select, both in box order
+  const o = getOrder(), titles = n => (readEdits()[n] || P[n]).title || P[n].title;
+  $('order').innerHTML = o.map((n, i) => `<li class="${n === curName ? 'cur' : ''}" data-n="${n}"><b>${i + 1}</b><span>${titles(n)}</span>` +
+    `<button data-d="-1" ${i ? '' : 'disabled'} title="Up">▲</button><button data-d="1" ${i < o.length - 1 ? '' : 'disabled'} title="Down">▼</button></li>`).join('');
+  const sel = $('preset'), v = sel.value;
+  sel.innerHTML = o.map(n => `<option value="${n}">${titles(n)}</option>`).join(''); sel.value = v || curName;
+}
 let saveTimer = null;
 function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 400); }
 function saveNow() {
@@ -602,7 +630,7 @@ $('all').onclick = () => { const rot = $('rot').value;   // read now: after the 
   const rr = await c.ask('R' + rot, /^OK rotation/, 5000); if (rr.startsWith('ERR')) throw new Error('Box: ' + rr.slice(4)); $('rot').value = rot;
   const cur = $('preset').value;
   saveNow();
-  for (const name of Object.keys(P)) {                 // each character with your saved edits (or the preset)
+  for (const name of getOrder()) {                     // each character (your edits or the preset), slot = its place in the order
     $('preset').value = name; await loadPreset(name);
     await sendPackRetry(c, +$('slot').value, buildPack(collect()), $('title').value);
   }
@@ -635,6 +663,10 @@ $('theme').onclick = () => setTheme(document.documentElement.dataset.theme === '
 try { setTheme(localStorage.getItem('gochi-theme') || 'light'); } catch (e) { setTheme('light'); }
 
 buildForm();
+$('order').onclick = e => { const li = e.target.closest('li'); if (!li) return; const n = li.dataset.n;
+  if (e.target.dataset.d) moveChar(n, getOrder().indexOf(n) + +e.target.dataset.d);
+  else if (n !== curName) { if (saveTimer) saveNow(); $('preset').value = n; loadPreset(n); } };
+$('slot').addEventListener('change', () => moveChar(curName, +$('slot').value));   // picking a slot moves the character there
 $('preset').onchange = () => { if (saveTimer) saveNow(); try { localStorage.setItem('gochi-last', $('preset').value); } catch (e) {} loadPreset($('preset').value); };
 $('revert').onclick = () => { clearTimeout(saveTimer); const name = curName;
   if (!confirm('Throw away your edits of ' + P[name].title + ' and go back to the preset?')) return;
@@ -644,14 +676,14 @@ $('export').onclick = () => {           // all characters (edits or presets) as 
   const all = readEdits(), out = {};
   for (const n of Object.keys(P)) out[n] = all[n] || P[n];
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({ gochi: 1, characters: out }, null, 1)], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ gochi: 1, order: getOrder(), characters: out }, null, 1)], { type: 'application/json' }));
   a.download = 'gochi-characters.json'; a.click();
 };
 $('import').onclick = () => $('importf').click();
 $('importf').onchange = e => { const f = e.target.files[0]; if (!f) return;
   f.text().then(t => { const j = JSON.parse(t); if (!j || j.gochi !== 1 || !j.characters) throw new Error('not a gochi file');
     const all = readEdits(); for (const n of Object.keys(P)) if (j.characters[n]) all[n] = j.characters[n];
-    if (!writeEdits(all)) throw new Error('browser storage full'); loadPreset($('preset').value); say('Imported characters from ' + f.name, 'ok'); })
+    if (!writeEdits(all)) throw new Error('browser storage full'); if (Array.isArray(j.order)) setOrder(j.order); loadPreset($('preset').value); say('Imported characters from ' + f.name, 'ok'); })
    .catch(err => say('Import failed: ' + err.message, 'err'));
   e.target.value = ''; };
 $('thr').oninput = () => { $('thrv').textContent = $('thr').value; for (let k = 0; k < 4; k++) if (moodImg[k]) drawMood(k); render(); saveSoon(); };
