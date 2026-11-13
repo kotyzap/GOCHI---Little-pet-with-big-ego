@@ -34,7 +34,7 @@
 #include "esp_timer.h"
 #include "soc/gpio_reg.h"
 
-static const char *VERSION = "0.6.2";
+static const char *VERSION = "0.6.3";
 static const uint32_t DEATH_S = 30 * 60;         // a stat at 0 this long = game over ("DYING! n MIN" meanwhile)
 static const uint32_t DYING_WAKE_S = 5 * 60;     // asleep while dying: wake this often to update the countdown
 static const uint32_t UNPLUGGED_MS = 3000;       // USB host gone this long before we may sleep
@@ -390,7 +390,11 @@ static int msgIdx = -1;                                // action message shown i
 static bool forceFull = false;
 static const uint32_t DEMO_STEP_MS = 2000, DEMO_BATT_MS = 180000;   // welcome slides: time per slide, longest run on battery
 static bool demo = false;                              // slides running (one round): the candidate's card
+static bool demoGame = false;                          // slide shows the game screen (else the big face card)
 static uint32_t demoAtMs = 0, demoStartMs = 0;         // current slide drawn at; slides started at
+static const uint32_t SPLASH_MS = 3000;               // "Welcome to GOCHI", then the slides start by themselves
+static bool splash = false;                            // splash showing (only while demo)
+static char cardTag[8] = "";                           // slides: "k/n" drawn on the game screen
 
 static void text(const char *t, int size, int x, int y, uint16_t c = GxEPD_BLACK) {
   display.setTextColor(c); display.setTextSize(size); display.setCursor(x, y); display.print(t);
@@ -457,7 +461,7 @@ static void draw(bool full) {
   } else if (bonusShow) text("FULL CHARGE!", 2, 4, 2);
   else if (msgIdx >= 0) { if (!drawBm(BM_MSG0 + msgIdx, 2, 0, 160, 18, GxEPD_BLACK)) text(MSG_TXT[msgIdx], 2, 4, 2); }
   else if (batNowPct < 20 && !charging) text("CHARGE ME!", 2, 4, 2);
-  else if (!drawBm(BM_TITLE, 2, 0, 160, 18, GxEPD_BLACK)) text("TRUMPGOCHI", 2, 4, 2);
+  else if (!drawBm(BM_TITLE, 2, 0, 160, 18, GxEPD_BLACK)) text("TRUMP-GOCHI", 2, 4, 2);
   bonusShow = false;
   char b[8]; snprintf(b, sizeof b, "%d%%", batNowPct);
   int bx = 196 - (int)strlen(b) * 6;
@@ -490,6 +494,7 @@ static void draw(bool full) {
     uint16_t c = on ? GxEPD_WHITE : GxEPD_BLACK;
     if (!drawBm(BM_ACT0 + i, x + 2, 175, 46, 23, c)) text(ACT_NAME[i], 1, x + 25 - (int)strlen(ACT_NAME[i]) * 3, 183, c);
   }
+  if (cardTag[0]) { text(cardTag, 2, 4, 40); text("press:", 1, 148, 40); text("skip", 1, 148, 50); }   // slide marks beside the face
   full = full || forceFull || (refreshes % FULL_REFRESH_EVERY) == 0;
   refreshes++;
   forceFull = false;
@@ -499,6 +504,20 @@ static void draw(bool full) {
 
 static void center(const char *t, int size, int y) { text(t, size, (200 - (int)strlen(t) * 6 * size) / 2, y); }
 
+// Splash before the slides: "Welcome to GOCHI"; after 3 s (or a press) the slides.
+static void drawSplash() {
+  display.setFullWindow();
+  display.fillScreen(GxEPD_WHITE);
+  center("Welcome to", 2, 52);
+  center("GOCHI", 5, 74);
+  display.fillRect(40, 122, 120, 2, GxEPD_BLACK);
+  center("Little Pets With", 1, 134);
+  center("Big Ego Game", 1, 146);
+  center("press to start", 1, 188);
+  refreshes++;
+  display.display(false);
+}
+
 // Mood bitmap i drawn 2x (160 x 160 for an 80 x 80 mood) centred at cx, top y.
 static void drawBm2(int i, int cx, int y) {
   const Bm &b = bms[i];
@@ -507,17 +526,28 @@ static void drawBm2(int i, int cx, int y) {
     if (b.d[j * bpr + (k >> 3)] & (0x80 >> (k & 7))) display.fillRect(x0 + 2 * k, y + 2 * j, 2, 2, GxEPD_BLACK);
 }
 
-// Welcome: the candidate's title and big happy face; short = next, long = choose.
+// Slide, two per character: big card (title + big face), then the game screen at its starting values (traits, actions).
+// Short = tiles, long = choose.
 static void drawWelcome(bool full) {
-  display.setFullWindow();
-  display.fillScreen(GxEPD_WHITE);
   int n = 0, k = 0;
   for (int i = 0; i < NSLOT; i++) if (slotExists(i)) { n++; if (i <= cand) k = n; }
-  if (!drawBm(BM_TITLE, 0, 0, 200, 18, GxEPD_BLACK)) center(packId, 2, 2);
-  if (bms[BM_MOOD0].w) drawBm2(BM_MOOD0, 100, 20); else drawFace();
-  char t[40]; snprintf(t, sizeof t, "%d/%d  short: next  long: choose", k, n);
-  center(t, 1, 188);
-  display.display(!(full || (refreshes++ % FULL_REFRESH_EVERY) == 0));
+  if (!demoGame) {
+    display.setFullWindow();
+    display.fillScreen(GxEPD_WHITE);
+    if (!drawBm(BM_TITLE, 0, 0, 200, 18, GxEPD_BLACK)) center(packId, 2, 2);
+    if (bms[BM_MOOD0].w) drawBm2(BM_MOOD0, 100, 20); else drawFace();
+    char t[24]; snprintf(t, sizeof t, "%d/%d   press: skip", k, n);
+    center(t, 1, 188);
+    display.display(!(full || forceFull || (refreshes++ % FULL_REFRESH_EVERY) == 0));
+    forceFull = false;
+    return;
+  }
+  State keep = st; int ks = sel; bool kb = bonusShow;
+  for (int i = 0; i < NSTAT; i++) st.v[i] = START[i];
+  st.zeroSince = 0; sel = -1; msgIdx = -1; bonusShow = false;
+  snprintf(cardTag, sizeof cardTag, "%d/%d", k, n);
+  draw(full);
+  cardTag[0] = 0; st = keep; sel = ks; bonusShow = kb;
 }
 
 // Bitmap i at half size (a pixel is black when any of its 2 x 2 source pixels is), top left x,y.
@@ -739,19 +769,20 @@ static void enterWelcome(uint32_t now) {
   cand = nextSlot(-1);
   if (cand < 0) { loadSlot(SLOT_BUILTIN); newGame(SLOT_BUILTIN, now); addStat(ENERGY, 0); sel = 0; }
   else { loadSlot(cand); st.slot = SLOT_NONE; st.dead = 0; st.ver = 2; }
-  demo = cand >= 0; demoStartMs = millis();
+  demo = splash = cand >= 0; demoGame = false; demoStartMs = millis();
   save(); forceFull = true; redraw = true;
 }
 
 static void show(uint32_t now, bool full) {
   if (st.dead) drawDead(now);
-  else if (st.slot == SLOT_NONE) { if (!demo) drawTiles(full); else drawWelcome(full); }
+  else if (st.slot == SLOT_NONE) { if (!demo) drawTiles(full); else if (splash) drawSplash(); else drawWelcome(full); }
   else draw(full);
 }
 
 static void onButton(int b, uint32_t now) {
   if (st.dead) { if (b == B_LONG) enterWelcome(now); return; }
   if (st.slot == SLOT_NONE) {
+    if (splash) { splash = false; forceFull = true; redraw = true; return; }   // splash: any press starts the slides
     bool slides = demo;
     demo = false;                                      // any press ends the slides; a short one only shows the tiles
     if (slides) forceFull = true;
@@ -847,10 +878,15 @@ void loop() {
       if (wasChg != charging || wasPct != batNowPct || bonusShow || st.zeroSince) redraw = true;   // dying: countdown each minute
       if (st.dead != wasDead) { save(); redraw = true; }
     }
-    if (demo && st.slot == SLOT_NONE && millis() - demoAtMs >= DEMO_STEP_MS && millis() - lastSerialMs > 2000) {   // not during an upload
-      int n = nextSlot(cand);                          // next character's card; after the last one: tiles
-      if (n <= cand) { demo = false; forceFull = true; }
-      if (n >= 0 && n != cand) { cand = n; loadSlot(cand); }
+    if (splash && st.slot == SLOT_NONE && millis() - demoAtMs >= SPLASH_MS && millis() - lastSerialMs > 2000) { splash = false; redraw = true; }   // first slide
+    else if (demo && !splash && st.slot == SLOT_NONE && millis() - demoAtMs >= DEMO_STEP_MS && millis() - lastSerialMs > 2000) {   // not during an upload
+      if (!demoGame) demoGame = true;                  // big card -> game screen of the same character
+      else {
+        demoGame = false;
+        int n = nextSlot(cand);                        // next character's big card; after the last one: tiles
+        if (n <= cand) { demo = false; forceFull = true; }
+        if (n >= 0 && n != cand) { cand = n; loadSlot(cand); }
+      }
       redraw = true;
     }
     if (redraw) { redraw = false; show(now, false); demoAtMs = millis(); }
@@ -859,7 +895,7 @@ void loop() {
   if (millis() - lastPluggedMs > UNPLUGGED_MS && !isDown && millis() - lastInput > idleLimit &&
       (!lastSerialMs || millis() - lastSerialMs > SERIAL_AWAKE_MS) && !(demo && millis() - demoStartMs < DEMO_BATT_MS)) {
     if (clockOk) { catchUp(now); save(); }
-    if (demo && clockOk && st.slot == SLOT_NONE) { demo = false; drawTiles(false); }   // slides cut short: sleep on the tiles
+    if (demo && clockOk && st.slot == SLOT_NONE) { demo = splash = false; drawTiles(false); }   // slides cut short: sleep on the tiles
     if (sel >= 0 && clockOk && st.slot != SLOT_NONE && !st.dead) { sel = -1; draw(false); }  // sleep without a highlighted item
     sleepAtMs = millis(); sleepIdleMs = millis() - lastInput;
     deepSleep(st.zeroSince && !st.dead && st.slot != SLOT_NONE ? DYING_WAKE_S : WAKE_EVERY_S);
