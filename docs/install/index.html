@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gochi Uploader</title>
+<!-- Author: Pavel Kotyza <kotyza@gmail.com> · 4xs.dev
+     Local page: builds a character pack (texts + 1-bit sprites + numbers) and sends it to the box over Web Serial.
+     Pack format and serial commands: see the header of trumpgochi.ino. -->
+<style>
+  :root {
+    color-scheme: light;
+    --bg-primary: #ffffff; --bg-secondary: #f8f9fa; --text-primary: #1a1a1a; --text-secondary: #666666;
+    --border: #e0e0e0; --accent: #0066cc; --accent-light: #f0f5ff; --success: #28a745; --error: #dc3545;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg-primary: #1a1a1a; --bg-secondary: #2d2d2d; --text-primary: #ffffff; --text-secondary: #aaaaaa;
+    --border: #404040; --accent: #4488ff; --accent-light: #1a2a4a; --success: #51cf66; --error: #ff6b6b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg-primary); color: var(--text-primary); padding: 20px; transition: background .3s, color .3s; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 15px;
+    border-bottom: 1px solid var(--border); gap: 10px; flex-wrap: wrap; }
+  h1 { font-size: 28px; font-weight: 700; }
+  .app-version { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-left: 8px; }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .theme-toggle { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); padding: 5px 10px;
+    border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .theme-toggle:hover { background: var(--accent-light); border-color: var(--accent); }
+  .kofi-link { background: #29abe0; color: #fff; text-decoration: none; padding: 5px 10px; border-radius: 6px;
+    border: 1px solid #1f92c2; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .container { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 20px; max-width: 1400px; }
+  @media (max-width: 1100px) { .container { grid-template-columns: 1fr; } }
+  .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px;
+    display: flex; flex-direction: column; gap: 15px; min-width: 0; }
+  .card-title { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border); }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label, .th { font-size: 12px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .3px; }
+  input[type="text"], input[type="number"], select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg-primary); color: var(--text-primary); font-size: 13px; font-family: inherit; min-width: 0; width: 100%; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  .hint { font-size: 11px; color: var(--text-secondary); }
+  .grid { display: grid; gap: 6px; align-items: center; }
+  .stats { grid-template-columns: 1.4fr .7fr .7fr; }
+  .acts { grid-template-columns: 1.2fr 1.6fr repeat(4, .7fr) .6fr; }
+  .acts input[type="number"], .stats input[type="number"] { padding: 6px 4px; text-align: center; }
+  button.btn { padding: 10px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    font-weight: 600; font-size: 13px; cursor: pointer; }
+  button.btn.secondary { background: var(--bg-primary); color: var(--text-primary); border-color: var(--border); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .moods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .mood { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  canvas.px { image-rendering: pixelated; border: 1px solid var(--border); background: #fff; }
+  .mood canvas { width: 100%; max-width: 120px; aspect-ratio: 1; }
+  .mood input[type="file"] { display: none; }
+  .mood .lnk { font-size: 11px; color: var(--accent); cursor: pointer; background: none; border: none; }
+  #screen { width: 400px; max-width: 100%; aspect-ratio: 1; align-self: center; }
+  #status { font-size: 13px; font-weight: 600; }
+  #status.ok { color: var(--success); } #status.err { color: var(--error); }
+  progress { width: 100%; height: 10px; }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; text-transform: none; letter-spacing: 0; color: var(--text-primary); }
+  .check input { width: 16px; height: 16px; accent-color: var(--accent); }
+  pre#log { font-size: 11px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; padding: 8px;
+    height: 180px; overflow: auto; white-space: pre-wrap; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gochi Uploader<span class="app-version">v0.5.3</span></h1>
+  <div class="header-actions">
+    <a class="kofi-link" href="https://ko-fi.com/pavelk" target="_blank" rel="noopener">Buy me a Ko-fi</a>
+    <button class="theme-toggle" id="theme">Dark mode</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="card">
+    <div class="card-title">Character</div>
+    <div class="row">
+      <div class="field" style="flex:2"><label for="preset">Preset</label>
+        <select id="preset"><option value="trump">Trumpgochi</option><option value="biden">Bidengochi</option>
+          <option value="zeman">Zemangochi</option><option value="babis">Babišgochi</option>
+          <option value="aoc">AOCgochi</option><option value="putin">Putingochi</option><option value="kim">Kimgochi</option>
+          <option value="xi">Xigochi</option></select></div>
+      <div class="field" style="flex:1"><label for="pid">Pack ID</label><input type="text" id="pid" maxlength="12"></div>
+      <div class="field" style="flex:1"><label for="slot">Box slot</label>
+        <select id="slot"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option><option value="5">6</option><option value="6">7</option><option value="7">8</option></select></div>
+    </div>
+    <div class="row">
+      <span class="hint" id="saved" style="flex:1"></span>
+      <button class="btn secondary" id="revert">Revert to preset</button>
+      <button class="btn secondary" id="export">Export</button>
+      <button class="btn secondary" id="import">Import</button>
+      <input type="file" id="importf" accept=".json,application/json" style="display:none">
+    </div>
+    <div class="field"><label for="title">Title</label><input type="text" id="title"></div>
+    <div>
+      <div class="grid stats"><span class="th">Stat</span><span class="th">Start</span><span class="th">Loss / h</span></div>
+      <div class="grid stats" id="stats"></div>
+      <div class="hint">Stat roles are fixed: 1 food (hungry face), 2 ego, 3 ratings (angry face below 25), 4 energy (tired face; never above the box battery %, refills while charging).</div>
+    </div>
+    <div>
+      <div class="grid acts"><span class="th">Action</span><span class="th">Message</span><span class="th" id="h0">1</span>
+        <span class="th" id="h1">2</span><span class="th" id="h2">3</span><span class="th" id="h3">4</span><span class="th">Pause h</span></div>
+      <div class="grid acts" id="acts"></div>
+      <div class="hint">Numbers = change of each stat. "Pause h" stops all loss for that many hours (sleep). Use \n in an action name for two lines.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Look</div>
+    <div class="moods" id="moods"></div>
+    <div class="field"><label for="thr">Threshold for uploaded images: <span id="thrv">128</span></label>
+      <input type="range" id="thr" min="20" max="235" value="128"></div>
+    <div class="hint">Moods are 80 × 80 black and white. Upload any picture (a PNG with a white background works best) or keep the built-in drawing.</div>
+    <div class="field"><label for="pmood">Preview (what the box shows)</label>
+      <select id="pmood"><option value="0">Happy</option><option value="1">Hungry</option><option value="2">Tired</option><option value="3">Angry</option><option value="m">After action 1 (message)</option></select></div>
+    <canvas id="screen" class="px" width="200" height="200"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Box</div>
+    <div class="hint">Desktop Chrome or Edge. Connect the box over USB-C. The box keeps up to 8 characters; on its welcome screen
+      you pick one (short press = next, long press = choose) and play it until it dies. Uploading also sets the box clock.</div>
+    <div class="row">
+      <button class="btn" id="all">Install all 8</button>
+      <button class="btn secondary" id="up">Upload this one</button>
+    </div>
+    <label class="check"><input type="checkbox" id="reset" checked> Reset the game after upload (box goes to the welcome screen)</label>
+    <div class="row">
+      <button class="btn secondary" id="read">Read box</button>
+      <button class="btn secondary" id="rm">Remove from slot</button>
+      <button class="btn secondary" id="rst">Reset game</button>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:1"><label for="rot">Screen rotation</label>
+        <select id="rot"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></div>
+      <button class="btn secondary" id="rotset" style="align-self:flex-end">Rotate</button>
+    </div>
+    <div class="hint" id="slots"></div>
+    <progress id="prog" value="0" max="1"></progress>
+    <div id="status">Not connected</div>
+    <div class="hint" id="size"></div>
+    <pre id="log"></pre>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const NS = 4, NA = 4, MOODS = ['Happy', 'Hungry', 'Tired', 'Angry'];
+
+// ---------- presets (public persona only: no health or age jokes) ----------
+const SLOT = { trump: 0, biden: 1, zeman: 2, babis: 3, aoc: 4, putin: 5, kim: 6, xi: 7 };
+const P = {
+  trump: { id: 'trump', title: 'TRUMPGOCHI', stats: [['BURGER', 70, 8], ['EGO', 60, 5], ['RATING', 75, 3], ['ENERGY', 80, 4]],
+    acts: [['FEED', '+25 BURGERS', [25, 0, 0, 0], 0], ['RALLY', 'RALLY! +EGO', [0, 20, 3, -15], 0],
+           ['GOLF', 'FORE!', [0, 0, -5, 15], 0], ['SLEEP', 'ZZZ… 1 H', [0, 0, 0, 35], 1]] },
+  biden: { id: 'biden', title: 'BIDENGOCHI', stats: [['ICE', 70, 7], ['MOOD', 70, 4], ['POLLS', 55, 3], ['ENERGY', 70, 4]],
+    acts: [['ICE\nCREAM', 'TWO SCOOPS!', [25, 5, 0, 0], 0], ['AMTRAK', 'ALL ABOARD!', [0, 10, 5, -15], 0],
+           ['AVIATORS', 'LOOKING COOL', [0, 15, 2, -5], 0], ['REST', 'NO MALARKEY', [0, 0, 0, 35], 1]] },
+  zeman: { id: 'zeman', title: 'ZEMANGOCHI', stats: [['PANÁK', 70, 8], ['EGO', 70, 4], ['OBLIBA', 60, 3], ['ENERGIE', 70, 4]],
+    acts: [['PANÁK', 'NA ZDRAVÍ!', [25, 5, 0, -5], 0], ['CIGARETA', 'JEŠTĚ JEDNU', [0, 10, -3, 5], 0],
+           ['ROZHOVOR', 'HOVORY Z LÁN', [0, 20, 3, -15], 0], ['SPÁNEK', 'DOBROU NOC', [0, 0, 0, 35], 1]] },
+  babis: { id: 'babis', title: 'BABIŠGOCHI', stats: [['KOBLIHY', 70, 7], ['EGO', 65, 5], ['VOLIČI', 65, 3], ['ENERGIE', 75, 4]],
+    acts: [['KOBLIHA', 'KOBLIHA ZDARMA!', [25, 5, 0, 0], 0], ['KAMPAŇ', 'TVRDĚ MAKÁM!', [0, 15, 5, -15], 0],
+           ['TIKTOK', 'SORRY JAKO!', [0, 10, 3, -5], 0], ['SPÁNEK', 'DOBROU NOC', [0, 0, 0, 35], 1]] },
+  aoc: { id: 'aoc', title: 'AOCGOCHI', stats: [['SNACK', 70, 7], ['VIBES', 70, 5], ['POLLS', 65, 3], ['ENERGY', 80, 4]],
+    acts: [['IG LIVE', 'COOKING LIVE!', [25, 10, 2, -5], 0], ['GREEN\nDEAL', 'GREEN NEW DEAL!', [0, 15, 5, -15], 0],
+           ['MET GALA', 'TAX THE RICH', [0, 20, -3, -10], 0], ['SLEEP', 'LOGGING OFF', [0, 0, 0, 35], 1]] },
+  putin: { id: 'putin', title: 'PUTINGOCHI', stats: [['BORSCHT', 70, 7], ['EGO', 75, 5], ['RATING', 70, 3], ['ENERGY', 75, 4]],
+    acts: [['BORSCHT', 'HOT BORSCHT!', [25, 0, 0, 5], 0], ['HORSE\nRIDE', 'SHIRTLESS RIDE!', [0, 20, 3, -15], 0],
+           ['LONG\nTABLE', 'SIT OVER THERE', [0, 15, -3, -5], 0], ['SLEEP', 'DO SVIDANIYA', [0, 0, 0, 35], 1]] },
+  kim: { id: 'kim', title: 'KIMGOCHI', stats: [['NOODLES', 70, 7], ['EGO', 80, 5], ['CHEERS', 75, 3], ['ENERGY', 75, 4]],
+    acts: [['NOODLES', 'COLD NOODLES!', [25, 0, 0, 0], 0], ['PARADE', 'BIG PARADE!', [0, 20, 5, -15], 0],
+           ['ROCKET', 'LAUNCH DAY!', [0, 15, -5, -10], 0], ['SLEEP', 'LIGHTS OUT', [0, 0, 0, 35], 1]] },
+  xi: { id: 'xi', title: 'XIGOCHI', stats: [['BAOZI', 70, 7], ['EGO', 75, 5], ['PARTY', 75, 3], ['ENERGY', 75, 4]],
+    acts: [['BAOZI', 'BUNS FOR ALL!', [25, 0, 2, 0], 0], ['BELT &\nROAD', 'NEW ROAD!', [0, 15, 5, -15], 0],
+           ['PANDA', 'PANDA DIPLOMACY', [0, 10, 5, -5], 0], ['SLEEP', 'GOOD NIGHT', [0, 0, 0, 35], 1]] },
+};
+
+// ---------- built-in caricatures, 80 x 80, black on white ----------
+function drawPreset(x, who, mood) {
+  x.fillStyle = '#fff'; x.fillRect(0, 0, 80, 80);
+  x.strokeStyle = x.fillStyle = '#000'; x.lineWidth = 3; x.lineCap = 'round'; x.lineJoin = 'round';
+  const cx = 40, cy = 40, r = 23, ey = cy - 2, my = cy + 11;
+  const line = (a, b, c, d) => { x.beginPath(); x.moveTo(a, b); x.lineTo(c, d); x.stroke(); };
+  const dot = (a, b, rr) => { x.beginPath(); x.arc(a, b, rr, 0, 7); x.fill(); };
+  if (who === 'babis') { x.beginPath(); x.arc(cx - r - 2, cy + 2, 6, 0, 7); x.arc(cx + r + 2, cy + 2, 6, 0, 7); x.stroke(); }
+  if (who === 'aoc') { x.beginPath(); x.ellipse(cx, cy + 6, 29, 33, 0, 0, 7); x.fill(); }          // long hair behind the head
+  x.fillStyle = '#fff'; x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); x.stroke(); x.fillStyle = '#000';
+  // hair
+  if (who === 'trump') {
+    x.beginPath(); x.ellipse(cx + 2, cy - 20, 26, 9, -0.1, 0, 7); x.fill();
+    x.beginPath(); x.moveTo(cx + 18, cy - 28); x.lineTo(cx + 33, cy - 18); x.lineTo(cx + 20, cy - 12); x.fill();
+  } else if (who === 'biden') {
+    x.lineWidth = 2; for (let k = 0; k < 3; k++) { x.beginPath(); x.arc(cx, cy + 2, r + 2 - k * 3, Math.PI * 1.15, Math.PI * 1.85); x.stroke(); }
+    x.lineWidth = 3;
+  } else if (who === 'zeman') {
+    x.lineWidth = 2; for (const s of [-1, 1]) for (let k = 0; k < 3; k++) line(cx + s * (r - 1), cy - 10 + k * 4, cx + s * (r + 4), cy - 12 + k * 4);
+    x.lineWidth = 3;
+  } else if (who === 'aoc') {                                                                       // fringe + hoop earrings
+    x.beginPath(); x.arc(cx, cy, r + 1, Math.PI * 1.17, Math.PI * 1.83); x.closePath(); x.fill();
+    x.lineWidth = 2; x.beginPath(); x.arc(cx - r - 1, cy + 9, 4, 0, 7); x.stroke(); x.beginPath(); x.arc(cx + r + 1, cy + 9, 4, 0, 7); x.stroke();
+    x.lineWidth = 3;
+  } else if (who === 'putin') {                                                                     // thin, receding hair
+    x.lineWidth = 2; for (const s of [-1, 1]) { x.beginPath(); x.arc(cx, cy, r + 3, Math.PI * (s < 0 ? 1.1 : 1.65), Math.PI * (s < 0 ? 1.35 : 1.9)); x.stroke(); }
+    x.lineWidth = 3;
+  } else if (who === 'kim') {                                                                       // flat top, shaved sides
+    x.beginPath(); x.moveTo(cx - 17, cy - 13); x.lineTo(cx - 15, cy - 27); x.lineTo(cx + 15, cy - 27); x.lineTo(cx + 17, cy - 13); x.closePath(); x.fill();
+  } else if (who === 'xi') {                                                                        // combed back, side part
+    x.beginPath(); x.arc(cx, cy, r + 1, Math.PI * 1.15, Math.PI * 1.85); x.closePath(); x.fill();
+    x.strokeStyle = '#fff'; x.lineWidth = 2; line(cx - 8, cy - 22, cx - 10, cy - 12); x.strokeStyle = '#000'; x.lineWidth = 3;
+  }
+  // eyes / glasses
+  const eyes = () => {
+    if (mood === 2) { line(cx - 13, ey, cx - 5, ey); line(cx + 5, ey, cx + 13, ey); }
+    else { dot(cx - 9, ey, 2.5); dot(cx + 9, ey, 2.5); }
+  };
+  if (who === 'biden') {
+    for (const s of [-1, 1]) { x.beginPath(); x.moveTo(cx + s * 3, ey - 5); x.lineTo(cx + s * 17, ey - 5); x.lineTo(cx + s * 15, ey + 5);
+      x.lineTo(cx + s * 6, ey + 5); x.closePath(); x.fill(); }
+    line(cx - 3, ey - 4, cx + 3, ey - 4);
+  } else if (who === 'zeman') {
+    x.lineWidth = 2; x.beginPath(); x.arc(cx - 9, ey, 6, 0, 7); x.stroke(); x.beginPath(); x.arc(cx + 9, ey, 6, 0, 7); x.stroke();
+    line(cx - 3, ey, cx + 3, ey); x.lineWidth = 3; eyes();
+  } else if (who === 'babis') {
+    x.lineWidth = 2; x.strokeRect(cx - 16, ey - 5, 13, 10); x.strokeRect(cx + 3, ey - 5, 13, 10); line(cx - 3, ey - 2, cx + 3, ey - 2);
+    x.lineWidth = 3; eyes();
+  } else eyes();
+  // brows (angry) and mouth
+  if (mood === 3) { line(cx - 15, ey - 11, cx - 5, ey - 7); line(cx + 15, ey - 11, cx + 5, ey - 7); }
+  if (mood === 0) { x.beginPath(); x.arc(cx, my - 5, 9, 0.2 * Math.PI, 0.8 * Math.PI); x.stroke(); }
+  else if (mood === 1) { x.beginPath(); x.arc(cx, my, 5, 0, 7); x.stroke(); }
+  else if (mood === 2) { line(cx - 6, my, cx + 6, my); x.font = 'bold 12px sans-serif'; x.fillText('Zzz', 58, 14); }
+  else { x.beginPath(); x.arc(cx, my + 7, 9, 1.2 * Math.PI, 1.8 * Math.PI); x.stroke(); }
+  // tie / collar
+  if (who === 'trump') { x.beginPath(); x.moveTo(cx, 65); x.lineTo(cx - 5, 70); x.lineTo(cx, 80); x.lineTo(cx + 5, 70); x.closePath(); x.fill(); }
+  else if (who === 'kim') { line(cx - 16, 70, cx + 16, 70); dot(cx, 76, 2); }                      // high-collar suit
+  else if (who !== 'aoc') { line(cx - 14, 68, cx, 78); line(cx + 14, 68, cx, 78); }
+}
+
+// ---------- 1-bit bitmaps ----------
+// Text bitmap cropped to its ink, largest bold font that fits maxW x maxH ("\n" = new line). {w, h, d: Uint8Array}
+function textBm(text, maxW, maxH, px) {
+  const c = document.createElement('canvas'); c.width = maxW; c.height = maxH;
+  const x = c.getContext('2d'), L = String(text).split('\n'); let lh;
+  for (;; px--) {
+    x.font = 'bold ' + px + 'px system-ui,"Segoe UI",Arial,sans-serif'; lh = Math.round(px * 1.1);
+    if (px <= 7 || (Math.max(...L.map(l => x.measureText(l).width)) <= maxW && lh * L.length <= maxH)) break;
+  }
+  x.fillStyle = '#fff'; x.fillRect(0, 0, maxW, maxH); x.fillStyle = '#000'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  L.forEach((l, k) => x.fillText(l, maxW / 2, (maxH - lh * L.length) / 2 + lh * (k + 0.5)));
+  return crop(x.getImageData(0, 0, maxW, maxH), 170);   // > 128: keeps thin anti-aliased strokes at small sizes
+}
+// A group of texts (e.g. the 4 action names) drawn alike: one font size (the largest that fits all) and one shared
+// vertical band, so the box draws them on the same baseline whatever accents (Á, Í…) they have.
+function textGroup(texts, maxW, maxH, px) {
+  const c = document.createElement('canvas'); c.width = maxW; c.height = maxH;
+  const x = c.getContext('2d'), lines = texts.map(t => String(t).split('\n'));
+  const fits = (L, p) => { x.font = 'bold ' + p + 'px system-ui,"Segoe UI",Arial,sans-serif';
+    return Math.max(...L.map(l => x.measureText(l).width)) <= maxW && Math.round(p * 1.1) * L.length <= maxH; };
+  while (px > 7 && !lines.every(L => fits(L, px))) px--;
+  x.font = 'bold ' + px + 'px system-ui,"Segoe UI",Arial,sans-serif';
+  const lh = Math.round(px * 1.1), imgs = lines.map(L => {
+    x.fillStyle = '#fff'; x.fillRect(0, 0, maxW, maxH); x.fillStyle = '#000'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    L.forEach((l, k) => x.fillText(l, maxW / 2, (maxH - lh * L.length) / 2 + lh * (k + 0.5)));
+    return x.getImageData(0, 0, maxW, maxH);
+  });
+  const thr = 170, ink = (d, i, j) => d[(j * maxW + i) * 4] < thr;
+  let y0 = maxH, y1 = -1;                                  // shared band: union of all inked rows
+  for (const im of imgs) for (let j = 0; j < maxH; j++) for (let i = 0; i < maxW; i++) if (ink(im.data, i, j)) { y0 = Math.min(y0, j); y1 = Math.max(y1, j); }
+  return imgs.map(im => {
+    let x0 = maxW, x1 = -1;
+    for (let j = y0; j <= y1; j++) for (let i = 0; i < maxW; i++) if (ink(im.data, i, j)) { x0 = Math.min(x0, i); x1 = Math.max(x1, i); }
+    if (x1 < 0) return { w: 1, h: 1, d: new Uint8Array(1) };
+    return pack((i, j) => ink(im.data, i, j), x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+  });
+}
+function crop(img, thr) {
+  const W = img.width, H = img.height, d = img.data, on = (i, j) => d[(j * W + i) * 4] < thr;
+  let x0 = W, x1 = -1, y0 = H, y1 = -1;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (on(i, j)) { x0 = Math.min(x0, i); x1 = Math.max(x1, i); y0 = Math.min(y0, j); y1 = Math.max(y1, j); }
+  if (x1 < 0) return { w: 1, h: 1, d: new Uint8Array(1) };
+  return pack(on, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+}
+function pack(on, x0, y0, w, h) {
+  const bpr = Math.ceil(w / 8), d = new Uint8Array(bpr * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (on(x0 + i, y0 + j)) d[j * bpr + (i >> 3)] |= 128 >> (i & 7);
+  return { w, h, d };
+}
+// Mood canvas (80 x 80) -> bitmap, not cropped (all moods keep the same position)
+function moodBm(cv) {
+  const d = cv.getContext('2d').getImageData(0, 0, 80, 80).data;
+  return pack((i, j) => d[(j * 80 + i) * 4] < 128, 0, 0, 80, 80);
+}
+
+// ---------- UI ----------
+const moodCv = [], moodImg = [null, null, null, null], moodSrc = [null, null, null, null];   // moodSrc: data URL kept with the edits
+function buildForm() {
+  let s = '';
+  for (let i = 0; i < NS; i++) s += `<input type="text" id="sn${i}" maxlength="12"><input type="number" id="ss${i}" min="0" max="100"><input type="number" id="sd${i}" min="0" max="25" step="0.1">`;
+  $('stats').innerHTML = s; s = '';
+  for (let a = 0; a < NA; a++) {
+    s += `<input type="text" id="an${a}" maxlength="20"><input type="text" id="am${a}" maxlength="24">`;
+    for (let i = 0; i < NS; i++) s += `<input type="number" id="ad${a}_${i}" min="-100" max="100">`;
+    s += `<input type="number" id="ap${a}" min="0" max="24">`;
+  }
+  $('acts').innerHTML = s; s = '';
+  MOODS.forEach((m, k) => s += `<div class="mood"><span class="th">${m}</span><canvas class="px" id="mc${k}" width="80" height="80"></canvas>
+    <input type="file" id="mf${k}" accept="image/*"><button class="lnk" data-up="${k}">Upload image</button><button class="lnk" data-def="${k}">Built-in</button></div>`);
+  $('moods').innerHTML = s;
+  for (let k = 0; k < 4; k++) {
+    moodCv[k] = $('mc' + k);
+    $('mf' + k).onchange = e => { const f = e.target.files[0]; if (!f) return; const im = new Image();
+      im.onload = () => {                 // keep a small copy (max 240 px) so it fits in the browser's saved edits
+        const sc = Math.min(1, 240 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+        c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        setMood(k, c.toDataURL('image/png')).then(() => { render(); saveSoon(); });
+      };
+      im.src = URL.createObjectURL(f); e.target.value = ''; };
+  }
+  $('moods').onclick = e => { const t = e.target;
+    if (t.dataset.up) $('mf' + t.dataset.up).click();
+    if (t.dataset.def) { setMood(+t.dataset.def, null); render(); saveSoon(); } };
+  document.querySelectorAll('.card input, .card select').forEach(el => el.addEventListener('input', () => { render(); if (el.id !== 'preset' && el.id !== 'pmood' && el.type !== 'file') saveSoon(); }));
+}
+function drawMood(k) {
+  const x = moodCv[k].getContext('2d'), im = moodImg[k];
+  if (!im) { drawPreset(x, $('preset').value, k); return; }
+  x.fillStyle = '#fff'; x.fillRect(0, 0, 80, 80);
+  const s = Math.min(80 / im.width, 80 / im.height), w = im.width * s, h = im.height * s;
+  x.drawImage(im, (80 - w) / 2, (80 - h) / 2, w, h);
+  const id = x.getImageData(0, 0, 80, 80), d = id.data, thr = +$('thr').value;
+  for (let i = 0; i < d.length; i += 4) {   // grey + alpha over white, then threshold
+    const a = d[i + 3] / 255, g = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) * a + 255 * (1 - a), v = g < thr ? 0 : 255;
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  x.putImageData(id, 0, 0);
+}
+// ---------- edits: kept in this browser per character, applied instead of the preset ----------
+const EDITS_KEY = 'gochi-edits';
+function readEdits() { try { return JSON.parse(localStorage.getItem(EDITS_KEY) || '{}'); } catch (e) { return {}; } }
+function writeEdits(all) { try { localStorage.setItem(EDITS_KEY, JSON.stringify(all)); return true; } catch (e) { return false; } }
+function setMood(k, src) {            // src: data URL or null (built-in drawing); resolves when drawn
+  moodSrc[k] = src;
+  if (!src) { moodImg[k] = null; drawMood(k); return Promise.resolve(); }
+  return new Promise(res => { const im = new Image(); im.onload = () => { moodImg[k] = im; drawMood(k); res(); }; im.onerror = () => res(); im.src = src; });
+}
+// Current form as a character (same shape as a preset, plus slot, mood images, threshold)
+function snapshot() {
+  return {
+    id: $('pid').value, title: $('title').value, slot: +$('slot').value, thr: +$('thr').value,
+    stats: [0, 1, 2, 3].map(i => [txt('sn' + i), +$('ss' + i).value, +$('sd' + i).value]),
+    acts: [0, 1, 2, 3].map(a => [txt('an' + a), $('am' + a).value, [0, 1, 2, 3].map(i => +$('ad' + a + '_' + i).value), +$('ap' + a).value]),
+    moods: moodSrc.slice(),
+  };
+}
+async function applyChar(name, c) {
+  $('slot').value = c.slot ?? SLOT[name];
+  $('pid').value = c.id; $('title').value = c.title;
+  $('thr').value = c.thr || 128; $('thrv').textContent = $('thr').value;
+  c.stats.forEach((s, i) => { $('sn' + i).value = s[0]; $('ss' + i).value = s[1]; $('sd' + i).value = s[2]; });
+  c.acts.forEach((a, k) => { $('an' + k).value = a[0].replace(/\n/g, '\\n'); $('am' + k).value = a[1];
+    a[2].forEach((v, i) => $('ad' + k + '_' + i).value = v); $('ap' + k).value = a[3]; });
+  await Promise.all([0, 1, 2, 3].map(k => setMood(k, (c.moods || [])[k] || null)));
+  render(); showSaved(name);
+}
+// Loads a character: your saved edits if there are any, else the preset
+let curName = null;                     // character shown in the form (the select may already show the next one)
+function loadPreset(name) { curName = name; return applyChar(name, readEdits()[name] || P[name]); }
+let saveTimer = null;
+function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 400); }
+function saveNow() {
+  clearTimeout(saveTimer);
+  if (!curName) return;
+  const name = curName, all = readEdits();
+  all[name] = snapshot();
+  if (!writeEdits(all)) { $('saved').textContent = 'Could not save in this browser (storage full or blocked): use Export.'; return; }
+  showSaved(name);
+}
+function showSaved(name) {
+  const e = readEdits()[name];
+  $('saved').textContent = e ? 'Your edits are saved in this browser.' : 'Preset (no edits).';
+  $('revert').disabled = !e;
+}
+const num = (id, lo, hi) => Math.max(lo, Math.min(hi, Math.round(+$(id).value || 0)));
+const txt = id => $(id).value.replace(/\\n/g, '\n');
+
+// Everything the box gets, as bitmaps + numbers (same slots as the firmware)
+function collect() {
+  const bm = [textBm($('title').value, 160, 18, 18)];
+  bm.push(...textGroup([0, 1, 2, 3].map(i => txt('sn' + i)), 40, 11, 10));
+  bm.push(...textGroup([0, 1, 2, 3].map(a => txt('an' + a)), 46, 22, 11));
+  bm.push(...textGroup([0, 1, 2, 3].map(a => $('am' + a).value), 160, 18, 18));
+  for (let k = 0; k < 4; k++) bm.push(moodBm(moodCv[k]));
+  return {
+    id: $('pid').value.replace(/[^\x20-\x7e]/g, '').slice(0, 12) || 'custom', bm,
+    start: [0, 1, 2, 3].map(i => num('ss' + i, 0, 100)),
+    decay: [0, 1, 2, 3].map(i => Math.max(0, Math.min(255, Math.round((+$('sd' + i).value || 0) * 10)))),
+    act: [0, 1, 2, 3].map(a => [0, 1, 2, 3].map(i => num('ad' + a + '_' + i, -100, 100))),
+    pause: [0, 1, 2, 3].map(a => num('ap' + a, 0, 24)),
+  };
+}
+function buildPack(c) {
+  const out = [...'GOCH'].map(ch => ch.charCodeAt(0));
+  out.push(1);
+  for (let i = 0; i < 12; i++) out.push(i < c.id.length ? c.id.charCodeAt(i) : 0);
+  out.push(...c.start, ...c.decay);
+  c.act.forEach(r => r.forEach(v => out.push(v & 255)));
+  out.push(...c.pause, c.bm.length);
+  c.bm.forEach(b => { out.push(b.w, b.h); out.push(...b.d); });
+  return new Uint8Array(out);
+}
+function crc32(b) {
+  let c = 0xFFFFFFFF;
+  for (const v of b) { c ^= v; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); }
+  return (~c) >>> 0;
+}
+
+// ---------- preview: same layout as draw() in the firmware ----------
+function render() {
+  for (let i = 0; i < NS; i++) { $('h' + i).textContent = txt('sn' + i).replace('\n', ' ') || i + 1; }
+  const c = collect(), x = $('screen').getContext('2d'), sel = $('pmood').value;
+  x.fillStyle = '#fff'; x.fillRect(0, 0, 200, 200);
+  const blit = (b, X, Y, W, H, col) => {
+    const img = x.getImageData(0, 0, 200, 200), d = img.data, bpr = Math.ceil(b.w / 8), ox = X + ((W - b.w) >> 1), oy = Y + ((H - b.h) >> 1);
+    for (let j = 0; j < b.h; j++) for (let i = 0; i < b.w; i++) if (b.d[j * bpr + (i >> 3)] & (128 >> (i & 7))) {
+      const p = ((oy + j) * 200 + ox + i) * 4; if (p >= 0 && p < d.length) d[p] = d[p + 1] = d[p + 2] = col; }
+    x.putImageData(img, 0, 0);
+  };
+  const smallText = (t, X, Y, col) => { x.fillStyle = col; x.font = '8px monospace'; x.textBaseline = 'top'; x.fillText(t, X, Y); };
+  blit(sel === 'm' ? c.bm[9] : c.bm[0], 2, 0, 160, 18, 0);
+  smallText('86%', 178, 5, '#000');
+  blit(c.bm[13 + (sel === 'm' ? 0 : +sel)], 60, 19, 80, 80, 0);
+  x.fillStyle = '#000';
+  for (let i = 0; i < NS; i++) {
+    const y = 102 + i * 16, v = c.start[i];
+    blit(c.bm[1 + i], 0, y, 40, 11, 0);
+    x.strokeStyle = '#000'; x.lineWidth = 1; x.strokeRect(42.5, y + .5, 125, 10);
+    x.fillStyle = '#000'; x.fillRect(44, y + 2, Math.round(v * 1.22), 7);
+    smallText(String(v), 172, y + 2, '#000');
+  }
+  for (let a = 0; a < NA; a++) {
+    const X = a * 50, on = a === 0;
+    x.fillStyle = '#000'; x.strokeStyle = '#000';
+    if (on) x.fillRect(X + 1, 174, 48, 25); else x.strokeRect(X + 1.5, 174.5, 47, 24);
+    blit(c.bm[5 + a], X + 2, 175, 46, 23, on ? 255 : 0);
+  }
+  const n = buildPack(c).length;
+  $('size').textContent = `Pack: ${n} bytes (${c.id})`;
+}
+
+// ---------- Web Serial (same pattern as the QR box setup page) ----------
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const log = t => { const l = $('log'); l.textContent += t + '\n'; l.scrollTop = l.scrollHeight; };
+const say = (t, cls) => { $('status').textContent = t; $('status').className = cls || ''; log(t); };
+const boxPort = async () => (await navigator.serial.getPorts()).filter(p => p.getInfo().usbVendorId === 0x303a)[0];
+
+async function conn() {
+  for (let w = 0; w < 120 && !(await boxPort()); w++) await sleep(500);
+  const port = await boxPort(); if (!port) throw new Error('Box not found. Press the button on the box to wake it.');
+  if (port.readable) await port.close().catch(() => {});
+  try { await port.open({ baudRate: 115200 }); }
+  catch (e) { if (/failed to open/i.test(e.message)) throw new Error('Another app is using the box (Arduino serial monitor, booth setup page). Close it and try again.'); throw e; }
+  await port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+  await sleep(500);
+  const rd = port.readable.getReader(), wr = port.writable.getWriter(), dec = new TextDecoder(), enc = new TextEncoder();
+  let buf = '';
+  return {
+    async ask(line, want, ms) {
+      buf = ''; await wr.write(enc.encode(line + '\n')); const end = Date.now() + (ms || 3000);
+      while (Date.now() < end) {
+        const r = await Promise.race([rd.read(), sleep(end - Date.now()).then(() => ({ timeout: true }))]);
+        if (r.timeout) break; if (r.done) throw new Error('box disconnected');
+        buf += dec.decode(r.value, { stream: true });
+        const ls = buf.split(/\r?\n|\r/); buf = ls.pop();
+        for (const l0 of ls) { const l = l0.trim(); if (want.test(l) || /^ERR /.test(l)) return l; }
+      }
+      throw new Error('box did not answer');
+    },
+    async close() { try { await rd.cancel(); } catch (e) {} try { rd.releaseLock(); } catch (e) {} try { wr.releaseLock(); } catch (e) {}
+      await port.close().catch(() => {}); },
+  };
+}
+// ---------- Full reinstall (files in fw/, built by ./fw.sh) ----------
+// "Install all 8" first erases the whole box and installs the Gochi firmware, whatever it ran before (booth QR, AIS,
+// Waveshare demo, an older Gochi). The erase drops packs, game and rotation; the page sends them right after.
+async function reinstall() {
+  say('Downloading the Gochi firmware…');
+  let m, mod, files;
+  try {
+    m = await (await fetch('fw/manifest.json', { cache: 'no-store' })).json();
+    files = await Promise.all(m.parts.map(async p => { const r = await fetch('fw/' + p.file + '?v=' + m.version); if (!r.ok) throw new Error(p.file + ' ' + r.status);
+      return { address: p.addr, data: new Uint8Array(await r.arrayBuffer()) }; }));
+    mod = await import('./fw/esptool-0.7.0.js');
+  } catch (e) { throw new Error('Gochi firmware not found (' + e.message + '). Run ./fw.sh in this folder and open the page through "python3 -m http.server", not as a file.'); }
+  for (let w = 0; w < 40 && !(await boxPort()); w++) await sleep(500);
+  const port = await boxPort(); if (!port) throw new Error('Box gone from USB. Press the button on the box and try again.');
+  say(`Erasing the box and installing the Gochi firmware ${m.version} (about 1 min, keep the cable in)…`);
+  const total = files.reduce((a, f) => a + f.data.length, 0), done = files.map(() => 0);
+  const tr = new mod.Transport(port, false), quiet = { clean() {}, writeLine() {}, write() {} };
+  try {
+    const ld = new mod.ESPLoader({ transport: tr, baudrate: 921600, romBaudrate: 115200, terminal: quiet });
+    await ld.main();
+    await ld.writeFlash({ fileArray: files, flashMode: 'keep', flashFreq: 'keep', flashSize: 'keep', eraseAll: true, compress: true,
+      reportProgress: (i, w) => { done[i] = w; const d = done.reduce((a, b) => a + b, 0); $('prog').max = total; $('prog').value = d;
+        $('status').textContent = 'Installing the Gochi firmware… ' + Math.round(d * 100 / total) + ' %'; } });
+    await ld.after('hard_reset');
+  } catch (e) { throw new Error('Firmware install failed (' + (e && e.message || e) + '). Unplug and replug the box, then try again.'); }
+  finally { await tr.disconnect().catch(() => {}); }
+  say('Firmware installed, the box restarts (its first start formats the pack storage)…'); await sleep(5000);
+}
+async function withBox(job, opt) {
+  if (!navigator.serial) { say('Web Serial missing: use desktop Chrome or Edge. Opened from a file and still missing? Run "python3 -m http.server" in this folder and open http://localhost:8000/gochi-uploader.html', 'err'); return; }
+  ['all', 'up', 'read', 'rm', 'rst', 'rotset'].forEach(id => $(id).disabled = true);
+  let c = null;
+  try {
+    if (!(await boxPort())) {
+      say('Pick the box (USB JTAG/serial debug unit)… Not in the list? Press the button on the box.');
+      try { await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] }); }
+      catch (e) { throw new Error('No box selected. If the list was empty, the box is asleep: press its button and try again.'); }
+    }
+    if (opt && opt.reinstall) await reinstall();
+    for (let a = 1; a <= 3; a++) {     // opening the port can reset the box: boot + first refresh take a few seconds
+      try {
+        say(a === 1 ? 'Connecting…' : `Box restarted, trying again (${a}/3)…`);
+        c = await conn();
+        const q = await c.ask('?', /^OK /, 8000);
+        if (!q.startsWith('OK gochi')) throw Object.assign(new Error('The box runs other firmware (' + q.slice(0, 40) + '…). Flash the gochi firmware first.'), { fatal: true });
+        log(q); showSlots(q);
+        // The USB link of this board can go quiet after a while (HWCDC, core 3.3.12): a fresh open brings it back.
+        const box = {
+          ask: (l, w, ms) => c.ask(l, w, ms),
+          async reconnect() { if (c) await c.close(); c = null; await sleep(800); c = await conn(); return c.ask('?', /^OK gochi/, 8000); },
+        };
+        await job(box, q);
+        return;
+      } catch (e) { if (c) { await c.close(); c = null; } if (e.fatal || e.done || a === 3) throw e; await sleep(1500); }
+    }
+  } catch (e) { say(e.message, 'err'); }
+  finally { if (c) await c.close(); ['all', 'up', 'read', 'rm', 'rst', 'rotset'].forEach(id => $(id).disabled = false); $('prog').value = 0; }
+}
+
+// One pack, retried after a reconnect when the box stops answering (PB starts the file over, so a retry is safe).
+async function sendPackRetry(box, slot, p, label) {
+  for (let a = 1; ; a++) {
+    try { return await sendPack(box, slot, p, label); }
+    catch (e) {
+      if (a >= 3 || !/did not answer|disconnected/.test(e.message)) throw Object.assign(e, { done: true });
+      say(`${label}: no answer, reconnecting (${a}/2)…`); await box.reconnect();
+    }
+  }
+}
+async function sendPack(c, slot, p, label) {
+  const CH = 512;
+  let r = await c.ask('PB' + slot + '.' + p.length, /^OK pb/, 5000);
+  if (r.startsWith('ERR')) throw new Error('Box: ' + r.slice(4));
+  $('prog').max = p.length;
+  for (let o = 0; o < p.length; o += CH) {
+    const hex = [...p.subarray(o, o + CH)].map(v => v.toString(16).padStart(2, '0')).join('');
+    r = await c.ask('PW' + hex, /^OK pw/, 5000);
+    if (r.startsWith('ERR')) throw new Error('Box: ' + r.slice(4));
+    $('prog').value = Math.min(p.length, o + CH); say(`${label}: ${Math.min(p.length, o + CH)} / ${p.length} bytes`);
+  }
+  r = await c.ask('PE' + crc32(p).toString(16).padStart(8, '0'), /^OK pack/, 8000);
+  if (r.startsWith('ERR')) throw new Error('Box: ' + r.slice(4));
+  log(r);
+}
+async function setClock(c) {
+  const t = await c.ask('T' + Math.floor(Date.now() / 1000), /^OK time set/, 5000);
+  if (t.startsWith('ERR')) throw new Error('Box: ' + t.slice(4));
+}
+function showSlots(q) {          // "? " reply: "... packs <mask> ..." and "slot <n>"
+  const rm = q.match(/ rot (\d+)/); if (rm) $('rot').value = rm[1];
+  const m = +((q.match(/ packs (\d+)/) || [])[1] || 0), sl = +((q.match(/ slot (-?\d+)/) || [])[1] ?? -2);
+  const names = ['1', '2', '3', '4', '5', '6', '7', '8'].map((n, i) => (m & (1 << i)) ? n + ' ✓' : n + ' –').join('   ');
+  $('slots').textContent = 'Slots on the box: ' + names + (sl >= 0 ? `   · playing slot ${sl + 1}` : sl === -1 ? '   · playing built-in' : '   · welcome screen');
+}
+// "N": ends the current gochi, the box shows the welcome screen (built-in Trump if no packs)
+async function resetGame(c) {
+  const r = await c.ask('N', /^OK new game/, 5000).catch(async () => { await c.reconnect(); return c.ask('N', /^OK new game/, 5000); });
+  if (r.startsWith('ERR')) throw new Error('Box: ' + r.slice(4));
+  log('Game reset: welcome screen');
+}
+$('up').onclick = () => withBox(async c => {
+  saveNow();
+  await setClock(c);
+  await sendPackRetry(c, +$('slot').value, buildPack(collect()), $('pid').value);
+  if ($('reset').checked) await resetGame(c);
+  const q = await c.ask('?', /^OK gochi/, 8000).catch(() => c.reconnect()); log(q); showSlots(q);
+  say('Done: ' + $('pid').value + ' is in slot ' + (+$('slot').value + 1), 'ok');
+});
+$('all').onclick = () => { const rot = $('rot').value;   // read now: after the erase the box reports rotation 0
+ withBox(async c => {
+  await setClock(c);
+  const rr = await c.ask('R' + rot, /^OK rotation/, 5000); if (rr.startsWith('ERR')) throw new Error('Box: ' + rr.slice(4)); $('rot').value = rot;
+  const cur = $('preset').value;
+  saveNow();
+  for (const name of Object.keys(P)) {                 // each character with your saved edits (or the preset)
+    $('preset').value = name; await loadPreset(name);
+    await sendPackRetry(c, +$('slot').value, buildPack(collect()), $('title').value);
+  }
+  $('preset').value = cur; await loadPreset(cur);
+  if ($('reset').checked) await resetGame(c);
+  const q = await c.ask('?', /^OK gochi/, 8000).catch(() => c.reconnect()); log(q); showSlots(q);
+  say('Done: firmware reinstalled, all 8 characters (with your edits) are on the box', 'ok');
+ }, { reinstall: true }); };
+$('rst').onclick = () => { if (confirm('Reset the game? The current gochi ends and the box shows the welcome screen.'))
+  withBox(async c => { await resetGame(c); const q = await c.ask('?', /^OK gochi/, 8000).catch(() => c.reconnect()); showSlots(q); say('Game reset: pick a gochi on the box', 'ok'); }); };
+$('rotset').onclick = () => {
+  const want = $('rot').value;          // read now: connecting runs "?", which shows the box's current (old) rotation
+  withBox(async c => {
+    const r = await c.ask('R' + want, /^OK rotation/, 5000);
+    if (r.startsWith('ERR')) throw new Error(r.includes('use R') ? 'Flash firmware 0.4.1 or newer for rotation.' : 'Box: ' + r.slice(4));
+    $('rot').value = want;
+    say('Screen rotated to ' + want + '°', 'ok');
+  });
+};
+$('read').onclick = () => withBox(async (c, q) => { showSlots(q); say(q.replace(/^OK /, ''), 'ok'); });
+$('rm').onclick = () => { const sl = +$('slot').value;
+  if (confirm(`Remove slot ${sl + 1} from the box? If that character is playing, the box goes back to the welcome screen.`))
+  withBox(async c => { const r = await c.ask('PX' + sl, /^OK pack/, 5000); if (r.startsWith('ERR')) throw new Error(r);
+    const q = await c.ask('?', /^OK gochi/, 8000); showSlots(q); say(`Slot ${sl + 1} removed`, 'ok'); }); };
+
+// ---------- theme (light default) ----------
+function setTheme(t) { document.documentElement.dataset.theme = t; $('theme').textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+  try { localStorage.setItem('gochi-theme', t); } catch (e) {} }
+$('theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+try { setTheme(localStorage.getItem('gochi-theme') || 'light'); } catch (e) { setTheme('light'); }
+
+buildForm();
+$('preset').onchange = () => { if (saveTimer) saveNow(); try { localStorage.setItem('gochi-last', $('preset').value); } catch (e) {} loadPreset($('preset').value); };
+$('revert').onclick = () => { clearTimeout(saveTimer); const name = curName;
+  if (!confirm('Throw away your edits of ' + P[name].title + ' and go back to the preset?')) return;
+  const all = readEdits(); delete all[name]; writeEdits(all); loadPreset(name); };
+$('export').onclick = () => {           // all characters (edits or presets) as one JSON file
+  saveNow();
+  const all = readEdits(), out = {};
+  for (const n of Object.keys(P)) out[n] = all[n] || P[n];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ gochi: 1, characters: out }, null, 1)], { type: 'application/json' }));
+  a.download = 'gochi-characters.json'; a.click();
+};
+$('import').onclick = () => $('importf').click();
+$('importf').onchange = e => { const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => { const j = JSON.parse(t); if (!j || j.gochi !== 1 || !j.characters) throw new Error('not a gochi file');
+    const all = readEdits(); for (const n of Object.keys(P)) if (j.characters[n]) all[n] = j.characters[n];
+    if (!writeEdits(all)) throw new Error('browser storage full'); loadPreset($('preset').value); say('Imported characters from ' + f.name, 'ok'); })
+   .catch(err => say('Import failed: ' + err.message, 'err'));
+  e.target.value = ''; };
+$('thr').oninput = () => { $('thrv').textContent = $('thr').value; for (let k = 0; k < 4; k++) if (moodImg[k]) drawMood(k); render(); saveSoon(); };
+{ let last = 'trump'; try { last = localStorage.getItem('gochi-last') || 'trump'; } catch (e) {}
+  if (!P[last]) last = 'trump'; $('preset').value = last; loadPreset(last); }
+</script>
+</body>
+</html>

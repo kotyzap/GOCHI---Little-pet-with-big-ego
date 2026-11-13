@@ -1,0 +1,1 @@
+{"version":"57c6865778e8","parts":[{"addr":0,"file":"bootloader.bin"},{"addr":32768,"file":"partitions.bin"},{"addr":57344,"file":"boot_app0.bin"},{"addr":65536,"file":"app.bin"}]}
