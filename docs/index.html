@@ -186,8 +186,8 @@ function setTheme(t) { document.documentElement.dataset.theme = t; $('theme').te
 $('theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 setTheme(store.get('gochi-theme') || 'light');
 
-const CAST = [['trump', 'TRUMP-GOCHI'], ['biden', 'BIDEN-GOCHI'], ['zeman', 'ZEMAN-GOCHI'], ['babis', 'BABIŠ-GOCHI'],
-  ['aoc', 'AOC-GOCHI'], ['putin', 'PUTIN-GOCHI'], ['kim', 'KIM-GOCHI'], ['xi', 'XI-GOCHI']];
+const CAST = [['trump', 'TRUMP-GOCHI'], ['biden', 'BIDEN-GOCHI'], ['aoc', 'AOC-GOCHI'], ['putin', 'PUTIN-GOCHI'],
+  ['kim', 'KIM-GOCHI'], ['xi', 'XI-GOCHI'], ['babis', 'BABIŠ-GOCHI'], ['zeman', 'ZEMAN-GOCHI']];   // box default order
 
 // ---------- faces: the uploader's built-in caricatures, 80 x 80 ----------
 function drawPreset(x, who, mood) {
@@ -292,6 +292,16 @@ function drawFlag(x, f, X, Y) {
     x.fillStyle = Wh; x.beginPath(); x.arc(X + 10, Y + 10, 4.5, 0, 7); x.fill(); star(10, 10, 3.5, B); }
   x.strokeStyle = B; x.lineWidth = 1; x.strokeRect(X + .5, Y + .5, W - 1, H - 1);
 }
+// film strip, same place on both cards; the current square fills in two halves (big card: triangle, game screen: full)
+function strip(x, k, whole) {
+  const n = CAST.length, x0 = (200 - (n * 12 + (n - 1) * 6)) / 2, y = 186;
+  x.fillStyle = x.strokeStyle = '#000'; x.lineWidth = 1;
+  for (let i = 0; i < n; i++) {
+    const X = x0 + i * 18;
+    x.strokeRect(X + .5, y + .5, 11, 11);
+    if (i === k) { if (whole) x.fillRect(X, y, 12, 12); else { x.beginPath(); x.moveTo(X, y); x.lineTo(X, y + 12); x.lineTo(X + 12, y + 12); x.closePath(); x.fill(); } }
+  }
+}
 // hero: like the intro on the box — "Welcome to GOCHI", each gochi as big card + game screen (2 s each), then the grid
 const SEQ = [-1, ...CAST.flatMap((c, k) => [2 * k, 2 * k + 1]), 99];   // -1 splash, 2k big card, 2k+1 game screen, 99 grid
 const HOLD = { '-1': 3000, 99: 6000 };
@@ -307,19 +317,20 @@ function drawDemo() {
     label(x, CAST[k][1], 2, 14, 196, 20);
     faceAt(x, who, 0, 20, 24, 2);
     if (FLAG[who]) drawFlag(x, FLAG[who], 164, 26);
-    label(x, `${k + 1}/8`, 0, 192, 200, 11);
+    strip(x, k, false);
   } else if (s !== 99) {
     const t = START[who];
-    label(x, `${k + 1}/8`, 0, 10, 30, 11); label(x, CAST[k][1], 32, 10, 136, 18);
+    label(x, CAST[k][1], 2, 10, 196, 18);
     faceAt(x, who, 0, 60, 19, 1);
-    for (let i = 0; i < 4; i++) {
-      const y = 102 + i * 16;
+    for (let i = 0; i < 4; i++) {                     // tighter rows (like the box intro) to leave room for the strip
+      const y = 102 + i * 13;
       label(x, t[i][0], 0, y + 6, 40, 10);
       x.strokeStyle = '#000'; x.lineWidth = 1; x.strokeRect(42.5, y + .5, 125, 10);
       x.fillRect(44, y + 2, Math.round(t[i][1] * 1.22), 7);
       label(x, String(t[i][1]), 168, y + 6, 32, 10);
     }
-    t[4].forEach((a, i) => { x.strokeRect(i * 50 + 1.5, 174.5, 47, 24); label(x, a, i * 50 + 2, 187, 46, 11); });
+    t[4].forEach((a, i) => { x.strokeRect(i * 50 + 1.5, 155.5, 47, 24); label(x, a, i * 50 + 2, 168, 46, 11); });
+    strip(x, k, true);
   } else {
     CAST.forEach((c, n) => { const X = n % 3 * 66 + 1, Y = Math.floor(n / 3) * 64 + 4;
       faceAt(x, c[0], 0, X + 13, Y, 0.5); label(x, c[0].toUpperCase(), X, Y + 49, 66, 10); });

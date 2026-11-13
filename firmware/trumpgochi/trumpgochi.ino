@@ -9,8 +9,10 @@
 //   PB<slot>.<bytes> begin, PW<hex> data (<= 512 bytes a line), PE<crc32 hex> end; PX<slot> removes one.
 // Welcome screen: with packs installed and no living gochi, all characters as tiles (small face + pack id);
 // short = next tile, long = choose it.
-// Demo: entering the welcome screen (upload/reset, game over) first shows every character once as a card (title + big
-// face), 2 s each; then the tiles. Short press skips to the tiles, long press picks the one shown.
+// Demo: entering the welcome screen (upload/reset, game over) first shows CONTROLS (any press), then ARE YOU 21+? (YES/NO),
+// the splash, then every character as a big card (title, big face, flag, film strip) and its game screen at the
+// starting values (traits, actions), 2 s each; then the tiles.
+// Short press skips to the tiles, long press picks the one shown.
 // A gochi dies when any stat has been at 0 for 30 min (the title counts down "DYING! n MIN"); a long press on the game-over screen goes back to the welcome screen.
 // No packs at all: the built-in Trump is played.
 // Battery bond: Energy can't go above the battery % (min 5); on a charger Energy refills +10/h and losses are halved;
@@ -34,7 +36,7 @@
 #include "esp_timer.h"
 #include "soc/gpio_reg.h"
 
-static const char *VERSION = "0.6.4";
+static const char *VERSION = "0.6.5";
 static const uint32_t DEATH_S = 30 * 60;         // a stat at 0 this long = game over ("DYING! n MIN" meanwhile)
 static const uint32_t DYING_WAKE_S = 5 * 60;     // asleep while dying: wake this often to update the countdown
 static const uint32_t UNPLUGGED_MS = 3000;       // USB host gone this long before we may sleep
@@ -413,10 +415,11 @@ static bool demoGame = false;                          // slide shows the game s
 static uint32_t demoAtMs = 0, demoStartMs = 0;         // current slide drawn at; slides started at
 static const uint32_t SPLASH_MS = 3000;               // "Welcome to GOCHI", then the slides start by themselves
 static bool splash = false;                            // splash showing (only while demo)
+static char cardTag[8] = "";                           // slides: "k/n" set while draw() paints an intro game screen
 RTC_DATA_ATTR static bool gate = false;                // "ARE YOU 21+?" before the splash (kept over deep sleep)
+RTC_DATA_ATTR static bool ctrl = false;                // "CONTROLS" screen before the 21+ question; any press = next
 static int gateSel = 0;                                // 21+ buttons: 0 YES, 1 NO (short = switch, long = confirm)
 static bool nope = false;                              // NO chosen: "SORRY" screen, any press = back to the question
-static char cardTag[8] = "";                           // slides: "k/n" drawn on the game screen
 
 static void text(const char *t, int size, int x, int y, uint16_t c = GxEPD_BLACK) {
   display.setTextColor(c); display.setTextSize(size); display.setCursor(x, y); display.print(t);
@@ -473,7 +476,22 @@ static void drawFace() {
   }
 }
 
+// Intro film strip at the bottom: one 12 x 12 square per installed character. The current one fills in two halves:
+// big card = lower-left triangle, game screen = the second triangle (full square).
+static void drawStrip(bool whole) {
+  int n = 0, k = 0;
+  for (int i = 0; i < NSLOT; i++) if (slotExists(i)) { n++; if (i <= cand) k = n; }
+  int x0 = (200 - (n * 12 + (n - 1) * 6)) / 2;
+  for (int i = 0; i < n; i++) {
+    int x = x0 + i * 18;
+    display.drawRect(x, 184, 12, 12, GxEPD_BLACK);
+    if (i == k - 1) { if (whole) display.fillRect(x, 184, 12, 12, GxEPD_BLACK); else display.fillTriangle(x, 184, x, 195, x + 11, 195, GxEPD_BLACK); }
+  }
+}
+
 static void draw(bool full) {
+  const bool slide = cardTag[0];                       // intro game screen: tighter rows, film strip at the bottom
+  const int rowH = slide ? 13 : 16, menuY = slide ? 155 : 174;
   display.setFullWindow();
   display.fillScreen(GxEPD_WHITE);
   if (st.zeroSince && !st.dead) {                      // countdown beats every other title
@@ -494,8 +512,8 @@ static void draw(bool full) {
     display.fillTriangle(x + 3, y + 6, x + 7, y + 6, x + 2, y + 13, GxEPD_BLACK);
   }
   if (!drawBm(BM_MOOD0 + mood(), 60, 19, 80, 80, GxEPD_BLACK)) drawFace();
-  for (int i = 0; i < NSTAT; i++) {                                       // bars 102..165
-    int y = 102 + i * 16;
+  for (int i = 0; i < NSTAT; i++) {                                       // bars 102..165 (slide: 102..152)
+    int y = 102 + i * rowH;
     if (!drawBm(BM_STAT0 + i, 0, y, 40, 11, GxEPD_BLACK)) text(STAT_NAME[i], 1, 2, y + 2);
     display.drawRect(42, y, 126, 11, GxEPD_BLACK);
     int w = (int)(st.v[i] * 1.22f + 0.5f);
@@ -508,15 +526,15 @@ static void draw(bool full) {
     char n[5]; snprintf(n, sizeof n, "%d", (int)(st.v[i] + 0.5f));
     text(n, 1, 172, y + 2);
   }
-  for (int i = 0; i < NACT; i++) {                                        // menu 174..199
+  for (int i = 0; i < NACT; i++) {                                        // menu 174..199 (slide: 155..180)
     int x = i * 50;
     bool on = i == sel;
-    if (on) display.fillRect(x + 1, 174, 48, 25, GxEPD_BLACK);
-    else display.drawRect(x + 1, 174, 48, 25, GxEPD_BLACK);
+    if (on) display.fillRect(x + 1, menuY, 48, 25, GxEPD_BLACK);
+    else display.drawRect(x + 1, menuY, 48, 25, GxEPD_BLACK);
     uint16_t c = on ? GxEPD_WHITE : GxEPD_BLACK;
-    if (!drawBm(BM_ACT0 + i, x + 2, 175, 46, 23, c)) text(ACT_NAME[i], 1, x + 25 - (int)strlen(ACT_NAME[i]) * 3, 183, c);
+    if (!drawBm(BM_ACT0 + i, x + 2, menuY + 1, 46, 23, c)) text(ACT_NAME[i], 1, x + 25 - (int)strlen(ACT_NAME[i]) * 3, menuY + 9, c);
   }
-  if (cardTag[0]) { text(cardTag, 2, 4, 40); text("press:", 1, 148, 40); text("skip", 1, 148, 50); }   // slide marks beside the face
+  if (slide) drawStrip(true);
   full = full || forceFull || (refreshes % FULL_REFRESH_EVERY) == 0;
   refreshes++;
   forceFull = false;
@@ -530,7 +548,21 @@ static void center(const char *t, int size, int y) { text(t, size, (200 - (int)s
 static void drawGate(bool full) {
   display.setFullWindow();
   display.fillScreen(GxEPD_WHITE);
-  if (nope) {
+  if (ctrl) {                                          // the box from the front (rotation 0): both buttons on the top edge
+    center("CONTROLS", 2, 4);
+    display.drawRoundRect(24, 46, 152, 82, 8, GxEPD_BLACK); display.drawRoundRect(25, 47, 150, 80, 7, GxEPD_BLACK);
+    display.drawRect(52, 56, 64, 64, GxEPD_BLACK);     // screen, left of centre like the case
+    display.drawRect(36, 42, 40, 4, GxEPD_BLACK);      // slot on the top edge
+    display.fillRect(100, 40, 16, 6, GxEPD_BLACK);     // BOOT: the button nearer the centre = the one to use
+    display.drawRect(132, 40, 16, 6, GxEPD_BLACK); display.drawRect(133, 41, 14, 4, GxEPD_BLACK);   // power
+    text("power", 1, 125, 30);
+    display.drawLine(107, 22, 107, 34, GxEPD_BLACK); display.drawLine(108, 22, 108, 34, GxEPD_BLACK);
+    display.fillTriangle(102, 32, 113, 32, 107, 38, GxEPD_BLACK);
+    text("THIS ONE", 1, 52, 28);
+    center("SHORT = NEXT", 2, 136);
+    center("LONG  = OK", 2, 158);
+    center("press to continue", 1, 186);
+  } else if (nope) {
     center("SORRY", 4, 50);
     center("Gochi is 21+ only.", 1, 100);
     center("Come back later.", 1, 112);
@@ -622,29 +654,28 @@ static void drawFlag(const char *f, int x, int y) {
   display.drawRect(x, y, W, H, B);
 }
 
-// Slide, two per character: big card (title + big face), then the game screen at its starting values (traits, actions).
-// Short = tiles, long = choose.
+// Slide, two per character: big card (title, big face, flag, film strip: one square per character, this one filled),
+// then the game screen at its starting values (traits, actions). Short = tiles, long = choose.
 static void drawWelcome(bool full) {
   int n = 0, k = 0;
   for (int i = 0; i < NSLOT; i++) if (slotExists(i)) { n++; if (i <= cand) k = n; }
-  if (!demoGame) {
-    display.setFullWindow();
-    display.fillScreen(GxEPD_WHITE);
-    if (!drawBm(BM_TITLE, 0, 0, 200, 18, GxEPD_BLACK)) center(packId, 2, 2);
-    if (bms[BM_MOOD0].w) drawBm2(BM_MOOD0, 100, 20); else drawFace();
-    if (const char *f = flagFor(packId)) drawFlag(f, 164, 22);   // top right corner, above the face's hair/hat
-    char t[24]; snprintf(t, sizeof t, "%d/%d   press: skip", k, n);
-    center(t, 1, 188);
-    display.display(!(full || forceFull || (refreshes++ % FULL_REFRESH_EVERY) == 0));
-    forceFull = false;
+  if (demoGame) {
+    State keep = st; int ks = sel; bool kb = bonusShow;
+    for (int i = 0; i < NSTAT; i++) st.v[i] = START[i];
+    st.zeroSince = 0; sel = -1; msgIdx = -1; bonusShow = false;
+    snprintf(cardTag, sizeof cardTag, "%d/%d", k, n);
+    draw(full);
+    cardTag[0] = 0; st = keep; sel = ks; bonusShow = kb;
     return;
   }
-  State keep = st; int ks = sel; bool kb = bonusShow;
-  for (int i = 0; i < NSTAT; i++) st.v[i] = START[i];
-  st.zeroSince = 0; sel = -1; msgIdx = -1; bonusShow = false;
-  snprintf(cardTag, sizeof cardTag, "%d/%d", k, n);
-  draw(full);
-  cardTag[0] = 0; st = keep; sel = ks; bonusShow = kb;
+  display.setFullWindow();
+  display.fillScreen(GxEPD_WHITE);
+  if (!drawBm(BM_TITLE, 0, 0, 200, 18, GxEPD_BLACK)) center(packId, 2, 2);
+  if (bms[BM_MOOD0].w) drawBm2(BM_MOOD0, 100, 20); else drawFace();
+  if (const char *f = flagFor(packId)) drawFlag(f, 164, 22);   // top right corner, above the face's hair/hat
+  drawStrip(false);
+  display.display(!(full || forceFull || (refreshes++ % FULL_REFRESH_EVERY) == 0));
+  forceFull = false;
 }
 
 // Bitmap i at half size (a pixel is black when any of its 2 x 2 source pixels is), top left x,y.
@@ -672,6 +703,7 @@ static void drawTiles(bool full) {
     text(t, 1, x + 33 - l * 3, y + 48);
   }
   loadSlot(cand);                                      // the candidate stays loaded: a long press starts it
+  text("CHOOSE", 1, 148, 136); text("YOUR", 1, 154, 147); text("GOCHI", 2, 136, 158);   // 9th cell, like the web grid
   center("short: next  long: choose", 1, 190);
   full = full || forceFull || (refreshes % FULL_REFRESH_EVERY) == 0;
   refreshes++;
@@ -867,7 +899,7 @@ static void enterWelcome(uint32_t now) {
   cand = nextSlot(-1);
   if (cand < 0) { loadSlot(SLOT_BUILTIN); newGame(SLOT_BUILTIN, now); addStat(ENERGY, 0); sel = 0; }
   else { loadSlot(cand); st.slot = SLOT_NONE; st.dead = 0; st.ver = 2; }
-  demo = splash = gate = cand >= 0; gateSel = 0; nope = false; demoGame = false; demoStartMs = millis();
+  demo = splash = gate = ctrl = cand >= 0; gateSel = 0; nope = false; demoGame = false; demoStartMs = millis();
   save(); forceFull = true; redraw = true;
 }
 
@@ -881,7 +913,8 @@ static void onButton(int b, uint32_t now) {
   if (st.dead) { if (b == B_LONG) enterWelcome(now); return; }
   if (st.slot == SLOT_NONE) {
     if (gate) {                                        // 21+: short = switch YES/NO, long = confirm
-      if (nope) { nope = false; gateSel = 0; forceFull = true; }
+      if (ctrl) { ctrl = false; forceFull = true; }    // controls seen -> 21+ question
+      else if (nope) { nope = false; gateSel = 0; forceFull = true; }
       else if (b == B_SHORT || b == B_DOUBLE) gateSel ^= 1;
       else if (b == B_LONG && gateSel == 1) { nope = true; forceFull = true; }
       else if (b == B_LONG) { gate = false; demo = splash = true; demoGame = false; demoStartMs = millis(); forceFull = true; }
