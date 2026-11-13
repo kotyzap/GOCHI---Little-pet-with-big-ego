@@ -4,8 +4,7 @@ A little pet with a very big ego. Gochi is a satirical one-button pet game for a
 and now also a web game for your phone.
 
 - **Play in your phone:** https://gochi.4xs.dev
-- **About the game:** https://kotyzap.github.io/gochi/
-- **Install on the box from your browser:** https://kotyzap.github.io/gochi/install/
+- **About the game:** https://kotyzap.github.io/GOCHI---Little-pet-with-big-ego/
 
 ![The box showing all eight gochis](docs/photos/box-grid.jpg)
 
@@ -26,13 +25,7 @@ Hint: the fastest possible game over takes about 30 minutes. Left alone, a gochi
 | Button | BOOT only: short press = next, long press (0.6 s) = do it, double press = back |
 | Sleep | Deep sleep between presses; wakes every 15 min to update the screen |
 | Battery bond | Energy can't go above the battery %. On a charger it refills and losses are halved |
-| Characters | Up to 8 packs (texts, numbers, 80 × 80 faces) sent from the install page |
-
-### Install
-
-Open the [install page](https://kotyzap.github.io/gochi/install/) in desktop Chrome or Edge, connect the box over USB-C and
-click **Install all 8**. It flashes the firmware in `docs/install/fw/` and sends the eight characters. You can edit the texts,
-numbers and faces there first.
+| Characters | Up to 8 packs (texts, numbers, 80 × 80 faces) sent over USB serial |
 
 ### Build it yourself
 
@@ -49,7 +42,7 @@ The pack format is described at the top of the sketch.
 ```
 firmware/trumpgochi/trumpgochi.ino   ESP32 firmware (0.6.2)
 firmware/fw.sh                       build script
-docs/index.html                      the page at kotyzap.github.io/gochi
+docs/index.html                      the page at kotyzap.github.io/GOCHI---Little-pet-with-big-ego
 docs/install/                        install page (Web Serial) + firmware binaries
 docs/photos/                         photos of the box
 ```
