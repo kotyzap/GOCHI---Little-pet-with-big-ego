@@ -96,7 +96,7 @@
         <a class="btn" href="#box">Get the box</a>
       </div>
     </div>
-    <div class="screen"><canvas id="demo" aria-label="The eight gochis, one after another"></canvas></div>
+    <div class="screen"><canvas id="demo" aria-label="Welcome to Gochi, then the eight gochis with their traits, one after another"></canvas></div>
   </div>
 
   <section>
@@ -185,8 +185,8 @@ function setTheme(t) { document.documentElement.dataset.theme = t; $('theme').te
 $('theme').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 setTheme(store.get('gochi-theme') || 'light');
 
-const CAST = [['trump', 'TRUMPGOCHI'], ['biden', 'BIDENGOCHI'], ['zeman', 'ZEMANGOCHI'], ['babis', 'BABIŠGOCHI'],
-  ['aoc', 'AOCGOCHI'], ['putin', 'PUTINGOCHI'], ['kim', 'KIMGOCHI'], ['xi', 'XIGOCHI']];
+const CAST = [['trump', 'TRUMP-GOCHI'], ['biden', 'BIDEN-GOCHI'], ['zeman', 'ZEMAN-GOCHI'], ['babis', 'BABIŠ-GOCHI'],
+  ['aoc', 'AOC-GOCHI'], ['putin', 'PUTIN-GOCHI'], ['kim', 'KIM-GOCHI'], ['xi', 'XI-GOCHI']];
 
 // ---------- faces: the uploader's built-in caricatures, 80 x 80 ----------
 function drawPreset(x, who, mood) {
@@ -257,17 +257,48 @@ function label(x, t, X, Y, W, px) { x.fillStyle = '#000'; x.textAlign = 'center'
   x.fillText(t, X + W / 2, Y); }
 
 // cast row
-$('cast').innerHTML = CAST.map(c => `<div><div class="f"><canvas data-who="${c[0]}"></canvas></div>${c[1].replace('GOCHI', '')}</div>`).join('');
+$('cast').innerHTML = CAST.map(c => `<div><div class="f"><canvas data-who="${c[0]}"></canvas></div>${c[1].replace('-GOCHI', '')}</div>`).join('');
 function drawCast() { document.querySelectorAll('#cast canvas').forEach(cv => { const x = fit(cv); faceAt(x, cv.dataset.who, 0, 20, 20, 2); }); }
 
-// hero: like the intro on the box — each gochi as a card for 2 s, then the grid of all eight
+// starting traits and actions, same as the presets (uploader, gochi-web game.js)
+const START = {
+  trump: [['BURGER', 70], ['EGO', 60], ['RATING', 75], ['ENERGY', 80], ['FEED', 'RALLY', 'GOLF', 'SLEEP']],
+  biden: [['ICE', 70], ['MOOD', 70], ['POLLS', 55], ['ENERGY', 70], ['ICE CREAM', 'AMTRAK', 'AVIATORS', 'REST']],
+  zeman: [['PANÁK', 70], ['EGO', 70], ['OBLIBA', 60], ['ENERGIE', 70], ['PANÁK', 'CIGARETA', 'ROZHOVOR', 'SPÁNEK']],
+  babis: [['KOBLIHY', 70], ['EGO', 65], ['VOLIČI', 65], ['ENERGIE', 75], ['KOBLIHA', 'KAMPAŇ', 'TIKTOK', 'SPÁNEK']],
+  aoc: [['SNACK', 70], ['VIBES', 70], ['POLLS', 65], ['ENERGY', 80], ['IG LIVE', 'GREEN DEAL', 'MET GALA', 'SLEEP']],
+  putin: [['BORSCHT', 70], ['EGO', 75], ['RATING', 70], ['ENERGY', 75], ['BORSCHT', 'HORSE RIDE', 'LONG TABLE', 'SLEEP']],
+  kim: [['NOODLES', 70], ['EGO', 80], ['CHEERS', 75], ['ENERGY', 75], ['NOODLES', 'PARADE', 'ROCKET', 'SLEEP']],
+  xi: [['BAOZI', 70], ['EGO', 75], ['PARTY', 75], ['ENERGY', 75], ['BAOZI', 'BELT & ROAD', 'PANDA', 'SLEEP']],
+};
+
+// hero: like the intro on the box — "Welcome to GOCHI", each gochi as big card + game screen (2 s each), then the grid
+const SEQ = [-1, ...CAST.flatMap((c, k) => [2 * k, 2 * k + 1]), 99];   // -1 splash, 2k big card, 2k+1 game screen, 99 grid
+const HOLD = { '-1': 3000, 99: 6000 };
 let step = 0;
 function drawDemo() {
-  const x = fit($('demo'));
-  if (step < CAST.length) {
-    label(x, CAST[step][1], 2, 14, 196, 20);
-    faceAt(x, CAST[step][0], 0, 20, 24, 2);
-    label(x, `${step + 1}/8`, 0, 192, 200, 11);
+  const x = fit($('demo')), s = SEQ[step], k = s >> 1, who = CAST[k] && CAST[k][0];
+  if (s === -1) {
+    label(x, 'Welcome to', 0, 58, 200, 14);
+    label(x, 'GOCHI', 0, 92, 200, 46);
+    x.fillRect(40, 118, 120, 2);
+    label(x, 'Little Pets With', 0, 134, 200, 11); label(x, 'Big Ego Game', 0, 148, 200, 11);
+  } else if (s !== 99 && !(s & 1)) {
+    label(x, CAST[k][1], 2, 14, 196, 20);
+    faceAt(x, who, 0, 20, 24, 2);
+    label(x, `${k + 1}/8`, 0, 192, 200, 11);
+  } else if (s !== 99) {
+    const t = START[who];
+    label(x, `${k + 1}/8`, 0, 10, 30, 11); label(x, CAST[k][1], 32, 10, 136, 18);
+    faceAt(x, who, 0, 60, 19, 1);
+    for (let i = 0; i < 4; i++) {
+      const y = 102 + i * 16;
+      label(x, t[i][0], 0, y + 6, 40, 10);
+      x.strokeStyle = '#000'; x.lineWidth = 1; x.strokeRect(42.5, y + .5, 125, 10);
+      x.fillRect(44, y + 2, Math.round(t[i][1] * 1.22), 7);
+      label(x, String(t[i][1]), 168, y + 6, 32, 10);
+    }
+    t[4].forEach((a, i) => { x.strokeRect(i * 50 + 1.5, 174.5, 47, 24); label(x, a, i * 50 + 2, 187, 46, 11); });
   } else {
     CAST.forEach((c, n) => { const X = n % 3 * 66 + 1, Y = Math.floor(n / 3) * 64 + 4;
       faceAt(x, c[0], 0, X + 13, Y, 0.5); label(x, c[0].toUpperCase(), X, Y + 49, 66, 10); });
@@ -275,7 +306,7 @@ function drawDemo() {
   }
 }
 drawDemo(); drawCast();
-setInterval(() => { step = (step + 1) % (CAST.length + 2); if (step <= CAST.length) drawDemo(); }, 2000);
+(function tick() { setTimeout(() => { step = (step + 1) % SEQ.length; drawDemo(); tick(); }, HOLD[SEQ[step]] || 2000); })();
 window.addEventListener('resize', () => { drawDemo(); drawCast(); });
 </script>
 </body>
