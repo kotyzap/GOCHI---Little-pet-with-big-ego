@@ -596,7 +596,6 @@ static void drawSplash() {
   display.fillRect(40, 122, 120, 2, GxEPD_BLACK);
   center("Little Pets With", 1, 134);
   center("Big Ego Game", 1, 146);
-  center("press to start", 1, 188);
   refreshes++;
   display.display(false);
 }
