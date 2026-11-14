@@ -18,7 +18,7 @@ and now also a web game for your phone.
 Hint: the fastest possible game over takes about 30 minutes. Left alone, a gochi lasts 9 to 10 hours.
 
 **Night:** every gochi sleeps 23:00–07:00 your time. Bars stop dropping and the 30-minute countdown waits.
-Wake it up and it's grumpy (Ego −10). It falls asleep again 10 minutes after your last tap.
+Every tap at night costs Ego −10, and the first one only wakes it up, grumpy. It falls asleep again 10 minutes after your last tap.
 The web uses your phone's time zone; the box gets it from the uploader when it sets the clock.
 
 ## The box
