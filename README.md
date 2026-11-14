@@ -4,6 +4,7 @@ A little pet with a very big ego. Gochi is a satirical one-button pet game for a
 and now also a web game for your phone.
 
 - **Play in your phone:** https://gochi.4xs.dev
+- **Play on a Stream Deck** (15 keys, local, no account): [download the plugin](https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego/releases/latest/download/com.4xsdev.gochi.streamDeckPlugin)
 - **About the game:** https://kotyzap.github.io/GOCHI---Little-pet-with-big-ego/
 
 ![Gochi on the ESP32 e-paper box and on a phone](docs/photos/gochi-box-and-phone.png)
@@ -40,6 +41,15 @@ The web uses your phone's time zone; the box gets it from the uploader when it s
 
 Serial commands (115200): `?` status, `?S` details, `T<unix>` set clock, `R<0|90|180|270>` rotate, `N` new game.
 The pack format is described at the top of the sketch.
+
+## Stream Deck
+
+| | |
+|---|---|
+| Device | Elgato Stream Deck MK.2, 15 keys (5 × 3), landscape |
+| Install | Download `com.4xsdev.gochi.streamDeckPlugin` from [Releases](https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego/releases/latest) and double-click it. The Gochi profile comes with it |
+| Game | Plays locally on your computer. No account, no cloud sync, nothing about you on the server |
+| Characters | Fetched from gochi.4xs.dev at start and every hour; built-in set when offline |
 
 ## Repo layout
 

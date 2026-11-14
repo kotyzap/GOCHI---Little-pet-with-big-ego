@@ -56,6 +56,25 @@
   .way li::before { content: ""; position: absolute; left: 0; top: .5em; width: 8px; height: 8px; background: var(--ink); }
   .way .btns { margin-top: auto; padding-top: 8px; }
   .way .btn { font-size: 14px; padding: 11px 14px; border-width: 3px; }
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .three .btns { gap: 8px; }
+  .three .btn { font-size: 12px; padding: 10px 10px; }
+  .shot { border: 4px solid var(--ink); aspect-ratio: 4/3; background: #fff; overflow: hidden; }
+  .shot img { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .shot img.cover { object-fit: cover; }
+  .shot.deck { background: #1c1c1e; }
+  /* device mockups: iPhone + Stream Deck 5 x 3 */
+  .mocks { display: grid; grid-template-columns: 1fr 2.2fr; gap: 28px; align-items: end; }
+  .mocks figure { text-align: center; }
+  .mocks figcaption { margin-top: 12px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); }
+  .iphone { position: relative; max-width: 260px; margin: 0 auto; aspect-ratio: 9/19.5; background: #fff; border: 11px solid #111;
+    border-radius: 44px; box-shadow: 0 0 0 2px #555; overflow: hidden; display: flex; align-items: center; }
+  .iphone::before { content: ""; position: absolute; top: 9px; left: 50%; transform: translateX(-50%); width: 30%; height: 22px;
+    background: #111; border-radius: 12px; z-index: 1; }
+  .iphone img { width: 100%; display: block; }
+  .sdeck { background: #111; border-radius: 26px; padding: 18px; box-shadow: 0 0 0 2px #555; }
+  .sdeck img { width: 100%; display: block; border-radius: 10px; }
+  .stand { width: 34%; height: 22px; margin: 0 auto; background: #2a2a2a; clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
   .tag { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); }
   .cast { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; text-align: center; font-size: 11px; text-transform: uppercase; }
   .cast .f { aspect-ratio: 1; background: #fff; }
@@ -92,7 +111,8 @@
     .steps { grid-template-columns: 1fr 1fr; }
     .step:nth-child(2) { border-right: 0; }
     .step:nth-child(-n+2) { border-bottom: 4px solid var(--ink); }
-    .two { grid-template-columns: 1fr; }
+    .two, .three { grid-template-columns: 1fr; }
+    .mocks { grid-template-columns: 1fr; }
     .cast { gap: 3px; font-size: 8px; line-height: 1.25; }   /* one row; names break after the hyphen */
     .photos { grid-template-columns: 1fr 1fr; }
     .pow { grid-template-columns: 1fr 1fr; }
@@ -147,9 +167,10 @@
   </section>
 
   <section id="box">
-    <h2>Two ways to play</h2>
-    <div class="two">
+    <h2>Three ways to play</h2>
+    <div class="three">
       <div class="way">
+        <div class="shot"><img src="img/phone-game.png" alt="Gochi in a phone: face, four bars and four actions" loading="lazy"></div>
         <span class="tag">Easy</span>
         <h3>In your phone</h3>
         <ul>
@@ -160,6 +181,7 @@
         <div class="btns"><a class="btn on" href="https://gochi.4xs.dev">Play now</a></div>
       </div>
       <div class="way">
+        <div class="shot"><img class="cover" src="photos/box-trump.jpg" alt="The box showing a gochi with four bars and four actions" loading="lazy"></div>
         <span class="tag">For makers</span>
         <h3>On the ESP32 box</h3>
         <ul>
@@ -171,6 +193,21 @@
         <div class="btns">
           <a class="btn on" href="https://www.waveshare.com/esp32-s3-epaper-1.54.htm">Buy the board</a>
           <a class="btn" href="https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego">Source</a>
+        </div>
+      </div>
+      <div class="way">
+        <div class="shot deck"><img src="img/deck-game.png" alt="Gochi on a 15-key Stream Deck: face on four keys, stats, actions on the bottom row" loading="lazy"></div>
+        <span class="tag">On your desk</span>
+        <h3>On a Stream Deck</h3>
+        <ul>
+          <li>Elgato Stream Deck MK.2, 15 keys (5 × 3).</li>
+          <li>Tap a key: the face fills four keys, actions are on the bottom row.</li>
+          <li>Plays locally on your computer. No account, no cloud sync.</li>
+          <li>Install the plugin; the Gochi profile comes with it.</li>
+        </ul>
+        <div class="btns">
+          <a class="btn on" href="https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego/releases/latest/download/com.4xsdev.gochi.streamDeckPlugin">Download</a>
+          <a class="btn" href="https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego/releases/latest">Releases</a>
         </div>
       </div>
     </div>
@@ -188,12 +225,27 @@
     </div>
   </section>
 
+  <section>
+    <h2>The phone and the deck</h2>
+    <div class="mocks">
+      <figure>
+        <div class="iphone"><img src="img/phone-game.png" alt="Gochi at gochi.4xs.dev in an iPhone" loading="lazy"></div>
+        <figcaption>gochi.4xs.dev in an iPhone</figcaption>
+      </figure>
+      <figure>
+        <div class="sdeck"><img src="img/deck-game.png" alt="Gochi on a 15-key Stream Deck" loading="lazy"></div>
+        <div class="stand"></div>
+        <figcaption>Stream Deck MK.2 · 5 × 3 keys</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <section class="small">
     <h2>Small print</h2>
     <p><b>21+ only.</b> Gochi is for adults. By playing you confirm you are 21 or older.</p>
     <p><b>Satire, for entertainment only.</b> The gochis are cartoon parodies of the public personas of well-known politicians. Nothing here is a statement of fact, and no words or actions are attributed to any real person. Gochi is not affiliated with, endorsed by or connected to anyone it depicts.</p>
     <p><b>No harm wanted.</b> "Game over" means a game ended. It is not a wish, a threat or a call for harm to anyone. I joke about burgers, parades and long tables. I don't joke about health, age or family.</p>
-    <p><b>What I store.</b> Your nickname, a hash of your PIN, and your gochi's game state. No email, no real name, no ads, no trackers. The sign-in is kept in your browser's storage.</p>
+    <p><b>What I store.</b> Your nickname, a hash of your PIN, and your gochi's game state. No email, no real name, no ads, no trackers. The sign-in is kept in your browser's storage. On a Stream Deck nothing is stored on the server: the game lives on your computer.</p>
     <p><b>Something bothers you?</b> Open an issue on <a href="https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego/issues">GitHub</a>.</p>
   </section>
 
