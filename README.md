@@ -7,7 +7,7 @@ and now also a web game for your phone and a plugin for the 15-key Stream Deck.
 - **Play on a Stream Deck** (15 keys, local, no account): [download the plugin](https://github.com/kotyzap/GOCHI---Little-pet-with-big-ego/releases/latest/download/com.4xsdev.gochi.streamDeckPlugin)
 - **About the game:** https://kotyzap.github.io/GOCHI---Little-pet-with-big-ego/
 
-![Gochi on the ESP32 e-paper box, on a phone and on a Stream Deck](docs/photos/gochi-box-and-phone.png)
+![Gochi on the ESP32 e-paper box, on a phone and on a Stream Deck](docs/photos/promo.jpg)
 
 ## How it works
 
