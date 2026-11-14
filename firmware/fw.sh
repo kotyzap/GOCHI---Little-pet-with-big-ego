@@ -1,22 +1,22 @@
 #!/bin/zsh
 # Builds the Gochi firmware and puts it in docs/install/fw/ next to the install page. "Install all 8" on that page erases the whole
 # box and installs this firmware (esptool-js), then sends the clock, rotation and all 8 packs.
-# Version = first 12 hex chars of sha256(trumpgochi.ino): any firmware change gets a new version, no manual bump.
-# Run on the Mac from this folder after changing trumpgochi.ino:  ./fw.sh
+# Version = first 12 hex chars of sha256(gochi.ino): any firmware change gets a new version, no manual bump.
+# Run on the Mac from this folder after changing gochi.ino:  ./fw.sh
 set -e
 cd "${0:A:h}"
-SRC=trumpgochi
+SRC=gochi
 OUT=../docs/install/fw
-B=/tmp/trumpgochi_build
+B=/tmp/gochi_build
 FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,USBMode=hwcdc"
-VER=$(shasum -a 256 $SRC/trumpgochi.ino | cut -c1-12)
+VER=$(shasum -a 256 $SRC/gochi.ino | cut -c1-12)
 TMPDIR=/tmp/ arduino-cli compile --fqbn "$FQBN" --build-path $B $SRC
 mkdir -p $OUT
 rm -f $OUT/*.bin(N)
-cp $B/trumpgochi.ino.bootloader.bin $OUT/bootloader.bin
-cp $B/trumpgochi.ino.partitions.bin $OUT/partitions.bin
+cp $B/gochi.ino.bootloader.bin $OUT/bootloader.bin
+cp $B/gochi.ino.partitions.bin $OUT/partitions.bin
 cp $B/boot_app0.bin $OUT/boot_app0.bin
-cp $B/trumpgochi.ino.bin $OUT/app.bin
+cp $B/gochi.ino.bin $OUT/app.bin
 # esptool-js 0.7.0 (Apache-2.0), the same copy the booth setup page uses
 ESPT="../QR Photo Booth/web/public/fw"
 [[ -f $OUT/esptool-0.7.0.js ]] || cp "$ESPT/esptool-0.7.0.js" "$ESPT/esptool-LICENSE.txt" $OUT/

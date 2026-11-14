@@ -31,7 +31,7 @@ Hint: the fastest possible game over takes about 30 minutes. Left alone, a gochi
 
 - Arduino core `esp32` 3.3.12, FQBN `esp32:esp32:esp32s3:CDCOnBoot=cdc,USBMode=hwcdc`
 - Libraries: GxEPD2, Adafruit GFX
-- Sketch: `firmware/trumpgochi/trumpgochi.ino`
+- Sketch: `firmware/gochi/gochi.ino`
 - `firmware/fw.sh` (macOS, zsh, needs `arduino-cli`) compiles it and puts the binaries into `docs/install/fw/`
 
 Serial commands (115200): `?` status, `?S` details, `T<unix>` set clock, `R<0|90|180|270>` rotate, `N` new game.
@@ -40,7 +40,7 @@ The pack format is described at the top of the sketch.
 ## Repo layout
 
 ```
-firmware/trumpgochi/trumpgochi.ino   ESP32 firmware (0.6.2)
+firmware/gochi/gochi.ino             ESP32 firmware (0.6.5)
 firmware/fw.sh                       build script
 docs/index.html                      the page at kotyzap.github.io/GOCHI---Little-pet-with-big-ego
 docs/install/                        install page (Web Serial) + firmware binaries
