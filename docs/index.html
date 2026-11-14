@@ -142,7 +142,7 @@
     <p>Every gochi has the same four bars, but not the same strengths. Six powers, worked out from each gochi's starting numbers and actions.</p>
     <div class="pow" id="pow"></div>
     <ul class="axes" id="axes"></ul>
-    <div class="hint">How to read it: each corner is a ranking inside the cast. The weakest gochi there sits near the middle, the strongest at the edge. Food is left out: all eight start at 70, eat +25 and lose 7 an hour, so nobody is stronger there.</div>
+    <div class="hint">How to read it: each corner is a ranking inside the cast, in the gochi's own words (EGO, MOOD, VIBES…). The weakest gochi there sits near the middle, the strongest at the edge. Food is left out: burgers, ice cream, panák or baozi, all eight start at 70, eat +25 and lose 7 an hour, so nobody is stronger there.</div>
     <div class="tscroll"><table class="ptab" id="ptab"></table></div>
   </section>
 
@@ -393,19 +393,30 @@ const FULL = {
 };
 const day = f => f[1].filter(a => !a[2]);                         // day actions = all but sleep
 const sum = (arr, g) => arr.reduce((t, v) => t + g(v), 0);
-const AX = [   // [name, what it means, value: higher = stronger]
-  ['EGO BOOST', 'Ego gained by doing each day action once (everything but sleep).', f => sum(day(f), a => Math.max(0, a[1][1]))],
-  ['THICK SKIN', 'Hours until Ego runs dry if nobody plays (start ÷ loss per hour).', f => f[0][1][1] / f[0][1][2]],
-  ['POPULARITY', 'Ratings won (or lost) by doing each day action once.', f => sum(day(f), a => a[1][2])],
-  ['RATING BANK', 'Hours until Ratings run dry if nobody plays (start ÷ loss per hour).', f => f[0][2][1] / f[0][2][2]],
-  ['STAMINA', 'Start Energy plus what the day actions add or burn.', f => f[0][3][1] + sum(day(f), a => a[1][3])],
-  ['LOW UPKEEP', 'Fewest side effects: all the minus points of the day actions together. Less is better.', f => sum(day(f), a => sum(a[1], v => Math.min(0, v)))],
+const AX = [   // [name, corner label in the gochi's own words, what it means, value: higher = stronger]
+  ['EGO GAIN', f => f[0][1][0] + ' UP', 'Ego gained by doing each day action once (everything but sleep).', f => sum(day(f), a => Math.max(0, a[1][1]))],
+  ['EGO LASTS', f => f[0][1][0] + ' LASTS', 'Hours until Ego runs dry if nobody plays.', f => f[0][1][1] / f[0][1][2]],
+  ['RATING GAIN', f => f[0][2][0] + ' UP', 'Ratings won (or lost) by doing each day action once.', f => sum(day(f), a => a[1][2])],
+  ['RATING LASTS', f => f[0][2][0] + (/S$/.test(f[0][2][0]) ? ' LAST' : ' LASTS'), 'Hours until Ratings run dry if nobody plays.', f => f[0][2][1] / f[0][2][2]],
+  ['ENERGY', f => f[0][3][0], 'Start Energy plus what the day actions add or burn.', f => f[0][3][1] + sum(day(f), a => a[1][3])],
+  ['NO DOWNSIDES', () => 'NO DOWNSIDES', 'Fewest minus points from the day actions.', f => sum(day(f), a => sum(a[1], v => Math.min(0, v)))],
 ];
+// Hand-written strong / weak lines (match the numbers above); a gochi not listed here gets the plain axis names.
+const LINES = {
+  trump: ['Golf refills him. Ratings that hold forever.', 'Ego leaks fastest in the cast. Only rallies fill it.'],
+  biden: ['Good mood all day. Aviators cost next to nothing.', 'Polls start low. Amtrak trips are tiring.'],
+  aoc: ['Best vibe machine in the cast. Every post = more vibes.', 'Always on, always tired. The Met Gala costs polls.'],
+  putin: ['Borscht even gives energy. Cheap to run.', 'The long table costs rating. Rides only break even.'],
+  kim: ['The cheers never stop. 25 hours of them.', 'Parades and rockets burn energy fast.'],
+  xi: ['Every action pleases the party. Buns included.', 'Belt & Road is a long walk.'],
+  babis: ['Free koblihy, happy voliči, no side effects.', 'Tvrdě maká! …and then needs a nap.'],
+  zeman: ['Ego lasts 17 hours. Hovory z Lán top it up.', 'Ještě jednu? Costs obliba every time.'],
+};
 const hexPt = (i, v, R) => { const a = -Math.PI / 2 + i * Math.PI / 3; return [Math.cos(a) * R * v / 100, Math.sin(a) * R * v / 100]; };
 const hexPoly = (vals, R) => vals.map((v, i) => hexPt(i, v, R).map(n => n.toFixed(1)).join(',')).join(' ');
 function drawPowers() {
   const keys = CAST.map(c => c[0]).filter(k => FULL[k]);
-  const raw = keys.map(k => AX.map(a => a[2](FULL[k])));
+  const raw = keys.map(k => AX.map(a => a[3](FULL[k])));
   const score = raw.map(r => r.map((v, i) => {           // rank inside the cast: weakest 20, strongest 100
     const col = raw.map(x => x[i]), lo = Math.min(...col), hi = Math.max(...col);
     return hi === lo ? 60 : Math.round(20 + 80 * (v - lo) / (hi - lo));   // rounded: equal tops tie
@@ -416,13 +427,13 @@ function drawPowers() {
     let g = '';
     for (const lv of [25, 50, 75, 100]) g += `<polygon points="${hexPoly([lv, lv, lv, lv, lv, lv], R)}" fill="none" stroke="var(--dim)" stroke-width="${lv === 100 ? 1.5 : .6}"/>`;
     for (let i = 0; i < 6; i++) { const [x, y] = hexPt(i, 100, R); g += `<line x1="0" y1="0" x2="${x}" y2="${y}" stroke="var(--dim)" stroke-width=".6"/>`;
-      const [tx, ty] = hexPt(i, 100, R + 10); g += `<text x="${tx}" y="${ty + 3}" text-anchor="${Math.abs(tx) < 5 ? 'middle' : tx > 0 ? 'start' : 'end'}">${AX[i][0]}</text>`; }
+      const [tx, ty] = hexPt(i, 100, R + 10); g += `<text x="${tx}" y="${ty + 3}" text-anchor="${Math.abs(tx) < 5 ? 'middle' : tx > 0 ? 'start' : 'end'}">${AX[i][1](FULL[k])}</text>`; }
     g += `<polygon points="${hexPoly(sc, R)}" fill="var(--ink)" fill-opacity=".22" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>`;
     return `<div><h3>${CAST.find(c => c[0] === k)[1]}</h3>
-      <div class="sw">Strongest: <b>${names(idx(v => v === hi))}</b><br>Weakest: <b>${names(idx(v => v === lo))}</b></div>
+      <div class="sw">Strong: <b>${LINES[k] ? LINES[k][0] : names(idx(v => v === hi))}</b><br>Weak: <b>${LINES[k] ? LINES[k][1] : names(idx(v => v === lo))}</b></div>
       <svg viewBox="-140 -92 280 184" role="img" aria-label="Power hexagon">${g}</svg></div>`;
   }).join('');
-  $('axes').innerHTML = AX.map(a => `<li><b>${a[0]}</b> — ${a[1]}</li>`).join('');
+  $('axes').innerHTML = AX.map(a => `<li><b>${a[0]}</b> — ${a[2]}</li>`).join('');
   const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
   $('ptab').innerHTML = '<tr><th>Gochi</th>' + AX.map(a => `<th>${a[0]}</th>`).join('') + '</tr>' + keys.map((k, n) =>
     `<tr><td>${CAST.find(c => c[0] === k)[1]}</td>` + raw[n].map((v, i) => { const col = raw.map(x => x[i]);
