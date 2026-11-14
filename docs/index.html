@@ -64,6 +64,24 @@
   .small p { font-size: 14px; max-width: 70ch; margin: 10px 0; }
   .small p b { font-weight: 900; text-transform: uppercase; }
   footer { border-top: 4px solid var(--ink); padding: 18px 0 40px; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); }
+  /* power hexagons: who is good at what */
+  .pow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 4px solid var(--ink); border-right: 0; border-bottom: 0; }
+  .pow > div { border-right: 4px solid var(--ink); border-bottom: 4px solid var(--ink); padding: 14px 12px 8px; }
+  .pow h3 { font-size: 16px; }
+  .pow .sw { font-size: 11px; text-transform: uppercase; color: var(--dim); margin-top: 4px; min-height: 3.9em; }
+  .pow .sw b { color: var(--ink); font-weight: 900; }
+  .pow svg { display: block; width: 100%; height: auto; }
+  .pow svg text { fill: var(--ink); font-size: 9px; font-weight: 800; }
+  .axes { list-style: none; margin-top: 20px; font-size: 14px; font-weight: 600; }
+  .axes li { padding-left: 18px; position: relative; margin: 6px 0; }
+  .axes li::before { content: ""; position: absolute; left: 0; top: .5em; width: 8px; height: 8px; background: var(--ink); }
+  .axes b { font-weight: 900; }
+  .ptab { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
+  .ptab th, .ptab td { border-bottom: 2px solid var(--ink); padding: 7px 6px; text-align: right; }
+  .ptab th { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .ptab th:first-child, .ptab td:first-child { text-align: left; }
+  .ptab td.top { background: var(--ink); color: var(--paper); font-weight: 900; }
+  .tscroll { overflow-x: auto; }
   /* 21+ gate */
   #gate { position: fixed; inset: 0; background: var(--paper); z-index: 9; display: flex; align-items: center; justify-content: center; padding: 24px; }
   #gate .in { max-width: 420px; text-align: center; display: flex; flex-direction: column; gap: 16px; align-items: center; }
@@ -77,6 +95,7 @@
     .two { grid-template-columns: 1fr; }
     .cast { gap: 3px; font-size: 8px; line-height: 1.25; }   /* one row; names break after the hyphen */
     .photos { grid-template-columns: 1fr 1fr; }
+    .pow { grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
@@ -116,6 +135,15 @@
   <section>
     <h2>The cast</h2>
     <div class="cast" id="cast"></div>
+  </section>
+
+  <section>
+    <h2>Who is good at what</h2>
+    <p>Every gochi has the same four bars, but not the same strengths. Six powers, worked out from each gochi's starting numbers and actions.</p>
+    <div class="pow" id="pow"></div>
+    <ul class="axes" id="axes"></ul>
+    <div class="hint">How to read it: each corner is a ranking inside the cast. The weakest gochi there sits near the middle, the strongest at the edge. Food is left out: all eight start at 70, eat +25 and lose 7 an hour, so nobody is stronger there.</div>
+    <div class="tscroll"><table class="ptab" id="ptab"></table></div>
   </section>
 
   <section id="box">
@@ -351,15 +379,66 @@ function drawDemo() {
     label(x, 'CHOOSE', 133, 150, 66, 13); label(x, 'YOUR', 133, 165, 66, 13); label(x, 'GOCHI', 133, 180, 66, 13);
   }
 }
+// power hexagons (same numbers as the game; the fetch below swaps in the live ones)
+// key: [stats [label, start, loss per hour], acts [label, change of food/ego/ratings/energy, pause hours]]
+const FULL = {
+  trump: [[['BURGER',70,7],['EGO',60,5],['RATING',75,3],['ENERGY',80,4]], [['FEED',[25,0,0,0],0],['RALLY',[0,20,3,-15],0],['GOLF',[0,0,-5,15],0],['SLEEP',[0,0,0,35],1]]],
+  biden: [[['ICE',70,7],['MOOD',70,4],['POLLS',55,3],['ENERGY',70,4]], [['ICE CREAM',[25,5,0,0],0],['AMTRAK',[0,10,5,-15],0],['AVIATORS',[0,15,2,-5],0],['REST',[0,0,0,35],1]]],
+  zeman: [[['PANÁK',70,7],['EGO',70,4],['OBLIBA',60,3],['ENERGIE',70,4]], [['PANÁK',[25,5,0,-5],0],['CIGARETA',[0,10,-3,5],0],['ROZHOVOR',[0,20,3,-15],0],['SPÁNEK',[0,0,0,35],1]]],
+  babis: [[['KOBLIHY',70,7],['EGO',65,5],['VOLIČI',65,3],['ENERGIE',75,4]], [['KOBLIHA',[25,5,0,0],0],['KAMPAŇ',[0,15,5,-15],0],['TIKTOK',[0,10,3,-5],0],['SPÁNEK',[0,0,0,35],1]]],
+  aoc: [[['SNACK',70,7],['VIBES',70,5],['POLLS',65,3],['ENERGY',80,4]], [['IG LIVE',[25,10,2,-5],0],['GREEN DEAL',[0,15,5,-15],0],['MET GALA',[0,20,-3,-10],0],['SLEEP',[0,0,0,35],1]]],
+  putin: [[['BORSCHT',70,7],['EGO',75,5],['RATING',70,3],['ENERGY',75,4]], [['BORSCHT',[25,0,0,5],0],['HORSE RIDE',[0,20,3,-15],0],['LONG TABLE',[0,15,-3,-5],0],['SLEEP',[0,0,0,35],1]]],
+  kim: [[['NOODLES',70,7],['EGO',80,5],['CHEERS',75,3],['ENERGY',75,4]], [['NOODLES',[25,0,0,0],0],['PARADE',[0,20,5,-15],0],['ROCKET',[0,15,-5,-10],0],['SLEEP',[0,0,0,35],1]]],
+  xi: [[['BAOZI',70,7],['EGO',75,5],['PARTY',75,3],['ENERGY',75,4]], [['BAOZI',[25,0,2,0],0],['BELT & ROAD',[0,15,5,-15],0],['PANDA',[0,10,5,-5],0],['SLEEP',[0,0,0,35],1]]],
+};
+const day = f => f[1].filter(a => !a[2]);                         // day actions = all but sleep
+const sum = (arr, g) => arr.reduce((t, v) => t + g(v), 0);
+const AX = [   // [name, what it means, value: higher = stronger]
+  ['EGO BOOST', 'Ego gained by doing each day action once (everything but sleep).', f => sum(day(f), a => Math.max(0, a[1][1]))],
+  ['THICK SKIN', 'Hours until Ego runs dry if nobody plays (start ÷ loss per hour).', f => f[0][1][1] / f[0][1][2]],
+  ['POPULARITY', 'Ratings won (or lost) by doing each day action once.', f => sum(day(f), a => a[1][2])],
+  ['RATING BANK', 'Hours until Ratings run dry if nobody plays (start ÷ loss per hour).', f => f[0][2][1] / f[0][2][2]],
+  ['STAMINA', 'Start Energy plus what the day actions add or burn.', f => f[0][3][1] + sum(day(f), a => a[1][3])],
+  ['LOW UPKEEP', 'Fewest side effects: all the minus points of the day actions together. Less is better.', f => sum(day(f), a => sum(a[1], v => Math.min(0, v)))],
+];
+const hexPt = (i, v, R) => { const a = -Math.PI / 2 + i * Math.PI / 3; return [Math.cos(a) * R * v / 100, Math.sin(a) * R * v / 100]; };
+const hexPoly = (vals, R) => vals.map((v, i) => hexPt(i, v, R).map(n => n.toFixed(1)).join(',')).join(' ');
+function drawPowers() {
+  const keys = CAST.map(c => c[0]).filter(k => FULL[k]);
+  const raw = keys.map(k => AX.map(a => a[2](FULL[k])));
+  const score = raw.map(r => r.map((v, i) => {           // rank inside the cast: weakest 20, strongest 100
+    const col = raw.map(x => x[i]), lo = Math.min(...col), hi = Math.max(...col);
+    return hi === lo ? 60 : Math.round(20 + 80 * (v - lo) / (hi - lo));   // rounded: equal tops tie
+  }));
+  const R = 70, names = list => list.map(i => AX[i][0]).join(' + ');
+  $('pow').innerHTML = keys.map((k, n) => {
+    const sc = score[n], hi = Math.max(...sc), lo = Math.min(...sc), idx = f => sc.map((v, i) => f(v) ? i : -1).filter(i => i >= 0);
+    let g = '';
+    for (const lv of [25, 50, 75, 100]) g += `<polygon points="${hexPoly([lv, lv, lv, lv, lv, lv], R)}" fill="none" stroke="var(--dim)" stroke-width="${lv === 100 ? 1.5 : .6}"/>`;
+    for (let i = 0; i < 6; i++) { const [x, y] = hexPt(i, 100, R); g += `<line x1="0" y1="0" x2="${x}" y2="${y}" stroke="var(--dim)" stroke-width=".6"/>`;
+      const [tx, ty] = hexPt(i, 100, R + 10); g += `<text x="${tx}" y="${ty + 3}" text-anchor="${Math.abs(tx) < 5 ? 'middle' : tx > 0 ? 'start' : 'end'}">${AX[i][0]}</text>`; }
+    g += `<polygon points="${hexPoly(sc, R)}" fill="var(--ink)" fill-opacity=".22" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>`;
+    return `<div><h3>${CAST.find(c => c[0] === k)[1]}</h3>
+      <div class="sw">Strongest: <b>${names(idx(v => v === hi))}</b><br>Weakest: <b>${names(idx(v => v === lo))}</b></div>
+      <svg viewBox="-140 -92 280 184" role="img" aria-label="Power hexagon">${g}</svg></div>`;
+  }).join('');
+  $('axes').innerHTML = AX.map(a => `<li><b>${a[0]}</b> — ${a[1]}</li>`).join('');
+  const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
+  $('ptab').innerHTML = '<tr><th>Gochi</th>' + AX.map(a => `<th>${a[0]}</th>`).join('') + '</tr>' + keys.map((k, n) =>
+    `<tr><td>${CAST.find(c => c[0] === k)[1]}</td>` + raw[n].map((v, i) => { const col = raw.map(x => x[i]);
+      return `<td class="${v === Math.max(...col) ? 'top' : ''}">${fmt(v)}</td>`; }).join('') + '</tr>').join('');
+}
+drawPowers();
 drawDemo(); drawCast();
 // same characters as the game: names, numbers, order and uploaded faces from gochi.4xs.dev (the list above = offline fallback)
 fetch('https://gochi.4xs.dev/api/chars').then(r => r.json()).then(j => {
   const keys = j.order.filter(k => j.chars[k] && !j.chars[k].kids);
   CAST = keys.map(k => [k, j.chars[k].title]);
   keys.forEach(k => { const c = j.chars[k]; FACES[k] = c.faces;
-    START[k] = [...c.stats.map(s => [s[0], s[1]]), c.acts.map(a => a[0].replace(/\n/g, ' '))]; });
+    START[k] = [...c.stats.map(s => [s[0], s[1]]), c.acts.map(a => a[0].replace(/\n/g, ' '))];
+    FULL[k] = [c.stats, c.acts.map(a => [a[0], a[2], a[3]])]; });
   SEQ = [-1, ...CAST.flatMap((c, k) => [2 * k, 2 * k + 1]), 99]; step = 0;
-  castRow(); drawDemo(); drawCast();
+  castRow(); drawDemo(); drawCast(); drawPowers();
 }).catch(() => {});
 (function tick() { setTimeout(() => { step = (step + 1) % SEQ.length; drawDemo(); tick(); }, HOLD[SEQ[step]] || 2000); })();
 window.addEventListener('resize', () => { drawDemo(); drawCast(); });
