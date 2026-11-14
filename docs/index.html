@@ -75,7 +75,7 @@
     .step:nth-child(2) { border-right: 0; }
     .step:nth-child(-n+2) { border-bottom: 4px solid var(--ink); }
     .two { grid-template-columns: 1fr; }
-    .cast { grid-template-columns: repeat(4, 1fr); }
+    .cast { gap: 3px; font-size: 8px; line-height: 1.25; }   /* one row; names break after the hyphen */
     .photos { grid-template-columns: 1fr 1fr; }
   }
 </style>
@@ -271,7 +271,7 @@ function label(x, t, X, Y, W, px) { x.fillStyle = '#000'; x.textAlign = 'center'
   x.fillText(t, X + W / 2, Y); }
 
 // cast row
-const castRow = () => $('cast').innerHTML = CAST.map(c => `<div><div class="f"><canvas data-who="${c[0]}"></canvas></div>${c[1].replace('-GOCHI', '')}</div>`).join('');
+const castRow = () => $('cast').innerHTML = CAST.map(c => `<div><div class="f"><canvas data-who="${c[0]}"></canvas></div>${c[1].replace('-', '-<wbr>')}</div>`).join('');
 castRow();
 function drawCast() { document.querySelectorAll('#cast canvas').forEach(cv => { const x = fit(cv); faceAt(x, cv.dataset.who, 0, 20, 20, 2); }); }
 
