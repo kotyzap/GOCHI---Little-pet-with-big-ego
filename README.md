@@ -6,16 +6,20 @@ and now also a web game for your phone.
 - **Play in your phone:** https://gochi.4xs.dev
 - **About the game:** https://kotyzap.github.io/GOCHI---Little-pet-with-big-ego/
 
-![The box showing all eight gochis](docs/photos/box-grid.jpg)
+![Gochi on the ESP32 e-paper box and on a phone](docs/photos/gochi-box-and-phone.png)
 
 ## How it works
 
 1. **Sign up** (web): a nickname and a 4-digit PIN.
 2. **Pick one** of eight gochis. The choice stays until the game is over. There is no reset.
-3. **Look after it.** Four bars drop in real time, also while the box sleeps or the page is closed. Actions push them back up.
+3. **Look after it.** Four bars drop in real time, also while the box sleeps or the page is closed. Actions push them back up. At night it sleeps.
 4. **Stay above zero.** Any bar at 0 for 30 minutes = game over. Then you pick again.
 
 Hint: the fastest possible game over takes about 30 minutes. Left alone, a gochi lasts 9 to 10 hours.
+
+**Night:** every gochi sleeps 23:00–07:00 your time. Bars stop dropping and the 30-minute countdown waits.
+Wake it up and it's grumpy (Ego −10). It falls asleep again 10 minutes after your last tap.
+The web uses your phone's time zone; the box gets it from the uploader when it sets the clock.
 
 ## The box
 
