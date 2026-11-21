@@ -13,7 +13,9 @@ and now also a web game for your phone and a plugin for the 15-key Stream Deck.
 
 1. **Start** (web): no sign-up needed. Save with a nickname and a 4-digit PIN to play the same gochi on another phone.
 2. **Pick one** of eight gochis. The choice stays until the game is over. There is no reset.
-3. **Look after it.** Four bars drop in real time, also while the box sleeps or the page is closed. Actions push them back up. At night it sleeps.
+3. **Look after it.** Four bars drop in real time, also while the box sleeps or the page is closed. Actions push them back up: each one is a short one-button game (catch, mash, timing) and the better you play, the more it gives. Each action works once every 2 hours. At night it sleeps.
+
+   ![The catch game: food falls, a tap turns the catcher](docs/img/catch.gif)
 4. **Stay above zero.** Any bar at 0 for 30 minutes = game over. Then you pick again.
 
 Hint: the fastest possible game over takes about 30 minutes. Left alone, a gochi lasts 9 to 10 hours.
